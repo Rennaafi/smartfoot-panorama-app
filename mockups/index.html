@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SmartFoot – mockup</title>
+<style>
+/* ---------- shared ---------- */
+*{box-sizing:border-box;margin:0}
+:root{--blue:#1f5fbf;--blue2:#e8f0fb;--ink:#14213d;--mute:#6b7a90;--line:#d8e0ec;--ok:#1f9d6b;--warn:#d98a00;--bad:#c93b3b;--bg:#f5f8fc;--card:#fff;--r:14px;font-family:"Segoe UI",system-ui,sans-serif}
+body{background:var(--bg);color:var(--ink);min-height:100vh}
+button{font:inherit;cursor:pointer;border:0}
+.hidden{display:none!important}
+#switcher{position:fixed;right:12px;bottom:12px;z-index:9;display:flex;gap:6px;background:#fff;border:1px solid var(--line);padding:6px;border-radius:999px;box-shadow:0 4px 18px #0002;font-size:13px}
+#switcher button{padding:6px 12px;border-radius:999px;background:#eef2f8;color:var(--ink)}
+#switcher button.on{background:var(--ink);color:#fff}
+.app{min-height:100vh;display:grid}
+.steps{display:flex;gap:6px}
+.step{display:flex;align-items:center;gap:10px;color:var(--mute);font-weight:600}
+.step i{font-style:normal;width:30px;height:30px;border-radius:50%;display:grid;place-items:center;border:2px solid var(--line);background:#fff;font-size:14px}
+.step.on{color:var(--blue)} .step.on i{background:var(--blue);border-color:var(--blue);color:#fff}
+.step.done{color:var(--ok)} .step.done i{background:var(--ok);border-color:var(--ok);color:#fff}
+main{padding:36px 44px;max-width:1100px;width:100%}
+h1{font-size:30px;margin-bottom:6px} .sub{color:var(--mute);margin-bottom:26px;font-size:17px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:24px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+label{display:block;font-weight:600;margin-bottom:6px;font-size:15px}
+input,select,textarea{width:100%;font:inherit;padding:13px 14px;border:1.5px solid var(--line);border-radius:10px;background:#fff;color:var(--ink)}
+input:focus,select:focus,textarea:focus{outline:3px solid #1f5fbf33;border-color:var(--blue)}
+.field{margin-bottom:18px}
+.seg{display:flex;gap:8px}.seg button{flex:1;padding:13px;border-radius:10px;background:#fff;border:1.5px solid var(--line);font-weight:600}
+.seg button.on{background:var(--blue2);border-color:var(--blue);color:var(--blue)}
+.btn{padding:16px 30px;border-radius:12px;font-weight:700;font-size:18px;background:var(--blue);color:#fff;box-shadow:0 2px 0 #144a96}
+.btn:hover{filter:brightness(1.08)}.btn.ghost{background:#fff;color:var(--ink);border:1.5px solid var(--line);box-shadow:none}
+.btn.ok{background:var(--ok);box-shadow:0 2px 0 #167a52}.btn.bad{background:#fff;color:var(--bad);border:1.5px solid var(--bad);box-shadow:none}
+.row{display:flex;gap:14px;align-items:center;flex-wrap:wrap}.right{margin-left:auto}
+.chip{display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:999px;font-size:14px;font-weight:600;background:var(--blue2);color:var(--blue)}
+.chip.ok{background:#e1f5ec;color:var(--ok)}.chip.warn{background:#fff1d6;color:#9a6200}
+.scanwin{aspect-ratio:210/297;max-height:480px;background:#f0f3f8;border:2px dashed var(--line);border-radius:12px;display:grid;place-items:center;position:relative;overflow:hidden}
+.scanwin svg{width:100%;height:100%}
+.bar{height:10px;border-radius:99px;background:var(--line);overflow:hidden}.bar b{display:block;height:100%;width:0;background:var(--blue);transition:width .2s}
+.checks{list-style:none;padding:0}.checks li{display:flex;gap:10px;padding:10px 0;border-bottom:1px solid var(--line);align-items:center}
+.dot{width:12px;height:12px;border-radius:50%;background:var(--ok)}.dot.w{background:var(--warn)}
+.rounds{display:flex;gap:8px;margin:14px 0}
+.rounds span{flex:1;text-align:center;padding:10px 4px;border-radius:10px;background:#fff;border:1.5px solid var(--line);font-size:14px;font-weight:600;color:var(--mute)}
+.rounds span.d{background:#e1f5ec;border-color:var(--ok);color:var(--ok)}.rounds span.c{background:var(--blue2);border-color:var(--blue);color:var(--blue)}
+.big{font-size:56px;font-weight:800;letter-spacing:-1px}
+.lang{font-size:13px;background:#fff;border:1px solid var(--line);padding:5px 10px;border-radius:99px}
+.brand{font-weight:800;font-size:20px;letter-spacing:-.3px}.brand span{color:var(--blue)}
+
+/* ---------- theme A: sidebar, clinical white ---------- */
+[data-theme=A] .app{grid-template-columns:260px 1fr}
+[data-theme=A] aside{background:#fff;border-right:1px solid var(--line);padding:28px 22px;display:flex;flex-direction:column;gap:30px}
+[data-theme=A] .steps{flex-direction:column;gap:20px}
+[data-theme=A] .topbar{display:none}
+
+/* ---------- theme B: top bar, big touch ---------- */
+[data-theme=B]{--r:22px;--bg:#eef3fb}
+[data-theme=B] .app{grid-template-rows:auto 1fr}
+[data-theme=B] aside{display:flex;align-items:center;gap:30px;padding:16px 36px;background:var(--blue);color:#fff}
+[data-theme=B] aside .brand span{color:#bcd6ff}
+[data-theme=B] .steps{flex:1;justify-content:center;gap:26px}
+[data-theme=B] .step{color:#b9d0f5}[data-theme=B] .step i{background:transparent;border-color:#8fb3ec;color:#d8e6ff}
+[data-theme=B] .step.on{color:#fff}[data-theme=B] .step.on i{background:#fff;color:var(--blue);border-color:#fff}
+[data-theme=B] .step.done{color:#fff}[data-theme=B] .step.done i{background:#3ec58d;border-color:#3ec58d;color:#fff}
+[data-theme=B] main{max-width:1200px;margin:0 auto}
+[data-theme=B] h1{font-size:38px}[data-theme=B] .btn{padding:22px 44px;font-size:22px;border-radius:18px}
+[data-theme=B] input,[data-theme=B] select,[data-theme=B] .seg button{padding:18px;font-size:19px}
+[data-theme=B] .card{box-shadow:0 8px 30px #1f5fbf14;border:0}
+[data-theme=B] .lang{background:#ffffff22;border:0;color:#fff}
+
+/* ---------- theme C: dark instrument ---------- */
+[data-theme=C]{--bg:#0d1523;--card:#152238;--ink:#e8eef9;--mute:#8da0bd;--line:#26385a;--blue:#4c9bff;--blue2:#1a3358;--r:10px}
+[data-theme=C] .app{grid-template-columns:84px 1fr}
+[data-theme=C] aside{background:#0a101c;border-right:1px solid var(--line);padding:20px 0;display:flex;flex-direction:column;align-items:center;gap:26px}
+[data-theme=C] .brand{font-size:13px;text-align:center}
+[data-theme=C] .steps{flex-direction:column;gap:18px}[data-theme=C] .step b{display:none}
+[data-theme=C] .step i{background:#152238;border-color:var(--line);color:var(--mute);width:42px;height:42px;font-size:16px}
+[data-theme=C] .step.on i{background:var(--blue);color:#06101f;border-color:var(--blue)}
+[data-theme=C] .step.done i{background:#143d2e;border-color:var(--ok);color:#5be0a8}
+[data-theme=C] input,[data-theme=C] select,[data-theme=C] textarea,[data-theme=C] .seg button{background:#0d1523;color:var(--ink)}
+[data-theme=C] .btn{color:#06101f;box-shadow:none}[data-theme=C] .btn.ghost{color:var(--ink);background:transparent}
+[data-theme=C] .scanwin{background:#0a101c}[data-theme=C] .lang,[data-theme=C] #switcher{background:#152238;color:var(--ink);border-color:var(--line)}
+[data-theme=C] #switcher button{background:#0d1523;color:var(--ink)}[data-theme=C] #switcher button.on{background:var(--blue);color:#06101f}
+[data-theme=C] .seg button.on{color:var(--blue)}[data-theme=C] .rounds span{background:#0d1523}
+[data-theme=C] .chip.ok{background:#143d2e;color:#5be0a8}[data-theme=C] .chip.warn{background:#4a3410;color:#ffc766}
+.theme-name{font-size:12px;color:var(--mute);margin-bottom:10px;text-transform:uppercase;letter-spacing:1px}
+</style>
+</head>
+<body data-theme="B">
+<div class="app">
+  <aside>
+    <div class="brand">Smart<span>Foot</span></div>
+    <div class="steps" id="steps"></div>
+    <div style="margin-top:auto" class="row"><button class="lang" id="lang">ID | EN</button></div>
+  </aside>
+  <main id="main"></main>
+</div>
+<style>
+table{width:100%;border-collapse:collapse;font-size:16px}th,td{padding:11px 10px;border-bottom:1px solid var(--line);text-align:right}th:first-child,td:first-child{text-align:left}th{color:var(--mute);font-weight:600;font-size:13px;text-transform:uppercase;letter-spacing:.5px}
+.kv{display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--line)}.kv span:first-child{color:var(--mute)}
+.gear{position:fixed;left:14px;bottom:14px}
+.teambar{background:#fff7e0;border:1px solid #f0d58a;color:#7a5a00;padding:8px 14px;border-radius:10px;font-size:14px;margin-bottom:18px;font-weight:600}
+</style>
+<script>
+const T={
+id:{steps:["Mulai","Pindai","Tinjau","Selesai"],team:"⚙ Tim",
+ start:"Sesi baru",startSub:"Isi data singkat pasien. Tidak perlu nama.",pid:"ID pasien",age:"Usia",sex:"Jenis kelamin",f:"Perempuan",m:"Laki-laki",op:"Inisial operator",note:"Catatan (opsional)",go:"Mulai pindai",
+ scan:"Pindai kaki",scanSub:"Letakkan kaki di atas kaca, tumit pada penahan. Diam sampai pemindaian selesai.",left:"Kaki kiri",right:"Kaki kanan",putaran:"Putaran",doScan:"Mulai pindai",scanning:"Memindai… jangan gerakkan kaki",ready:"Siap",
+ review:"Tinjau hasil",reviewSub:"Garis biru = tepi kaki yang terdeteksi. Pastikan sesuai bentuk kaki.",chk1:"Kaki penuh di dalam area",chk2:"Tepi kaki jelas",chk3:"Tidak ada gerakan (gambar tidak buram)",accept:"Terima",retake:"Ulangi",
+ done:"Sesi selesai",doneSub:"Semua pemindaian tersimpan.",saved:"Tersimpan di",scans:"pemindaian",newS:"Sesi baru",research:"Layar riset (tim) →",
+ set:"Pengaturan tim",setSub:"Hanya untuk tim peneliti. Perawat tidak perlu membuka halaman ini.",teamOnly:"Area tim · tidak ditampilkan di alur perawat",
+ rnd:"Jumlah putaran bawaan",r1:"1 putaran",r3:"3 putaran",rndNote:"Tercatat di setiap file sesi.",
+ cal:"Kalibrasi skala",calNote:"Dilakukan sekali pada casing final (akrilik terpasang), per pemindai.",calX:"Skala sumbu pindai (mm/piksel)",calY:"Skala sumbu sensor (mm/piksel)",calDate:"Tanggal kalibrasi",calRuler:"Penggaris",calSpread:"Sebaran ulangan",calDo:"Kalibrasi ulang",calChk:"Periksa skala",calChkOk:"✓ Skala masih sesuai (selisih 0,21%)",
+ dataf:"Folder data",back:"← Kembali",
+ resT:"Layar riset",resSub:"Angka ukuran dari pemindaian. Tanpa label datar/normal/tinggi.",tbl:"Pemindaian sesi",sc:"Pindai",fl:"Panjang (mm)",fw:"Lebar (mm)",ar:"Luas (cm²)",ai:"AI",csi:"CSI",corr:"Titik dikoreksi",pts:"Seret dua titik putih (pusat tumit & ujung jari ke-2) untuk mengoreksi.",yes:"ya",no:"tidak",noLabel:"Tidak ada label klasifikasi. Batas AI belum divalidasi untuk posisi duduk."},
+en:{steps:["Start","Scan","Review","Done"],team:"⚙ Team",
+ start:"New session",startSub:"Enter brief patient details. No name needed.",pid:"Patient ID",age:"Age",sex:"Sex",f:"Female",m:"Male",op:"Operator initials",note:"Note (optional)",go:"Start scanning",
+ scan:"Scan foot",scanSub:"Place the foot on the glass, heel against the stop. Keep still until the scan ends.",left:"Left foot",right:"Right foot",putaran:"Round",doScan:"Start scan",scanning:"Scanning… keep the foot still",ready:"Ready",
+ review:"Review result",reviewSub:"Blue line = detected foot edge. Make sure it follows the foot.",chk1:"Whole foot inside the area",chk2:"Edge is clear",chk3:"No movement (image not blurred)",accept:"Accept",retake:"Retake",
+ done:"Session complete",doneSub:"All scans are saved.",saved:"Saved to",scans:"scans",newS:"New session",research:"Research screen (team) →",
+ set:"Team settings",setSub:"For the research team only. Nurses never need this page.",teamOnly:"Team area · not shown in the nurse flow",
+ rnd:"Default number of rounds",r1:"1 round",r3:"3 rounds",rndNote:"Recorded in every session file.",
+ cal:"Scale calibration",calNote:"Done once on the final case (acrylic in place), per scanner.",calX:"Scan-axis scale (mm/pixel)",calY:"Sensor-axis scale (mm/pixel)",calDate:"Calibration date",calRuler:"Ruler",calSpread:"Repeat spread",calDo:"Recalibrate",calChk:"Check scale",calChkOk:"✓ Scale still matches (0.21% difference)",
+ dataf:"Data folder",back:"← Back",
+ resT:"Research screen",resSub:"Size numbers from the scans. No flat/normal/high label.",tbl:"Scans in this session",sc:"Scan",fl:"Length (mm)",fw:"Width (mm)",ar:"Area (cm²)",ai:"AI",csi:"CSI",corr:"Points corrected",pts:"Drag the two white points (heel centre & 2nd-toe tip) to correct them.",yes:"yes",no:"no",noLabel:"No classification label. AI cutoffs are not validated for seated posture."}};
+let L="id",S=0,total=3,idx=0,seq=[],pid="SFP-0001",sex="f",corrected=false,py=48;
+const $=s=>document.querySelector(s),t=k=>T[L][k];
+const POS={0:0,2:1,3:2,4:3};
+function mkSeq(){seq=[];for(let r=1;r<=total;r++){seq.push(["right",r]);seq.push(["left",r])}}
+mkSeq();
+const OUT="M112 258c-16 8-38 6-44-12-6-20 4-44 2-70-2-26-20-52-12-86 7-30 34-44 56-36 24 8 30 40 26 70-3 24 6 46 8 70 2 22-8 56-36 64z";
+const foot=(side,out)=>`<svg viewBox="0 0 210 297"><g transform="${side=='left'?'translate(210,0) scale(-1,1)':''}"><path d="${OUT}" fill="${out?'#c9a58a':'#d7b79e'}"/><g fill="${out?'#c9a58a':'#d7b79e'}"><ellipse cx="114" cy="62" rx="13" ry="16"/><ellipse cx="135" cy="70" rx="8" ry="11"/><ellipse cx="148" cy="82" rx="7" ry="10"/><ellipse cx="156" cy="97" rx="6" ry="9"/><ellipse cx="160" cy="112" rx="5" ry="8"/></g>${out?`<path d="${OUT}" fill="none" stroke="#1f5fbf" stroke-width="2.5"/>`:''}</g></svg>`;
+function footPts(){return `<svg id="psvg" viewBox="0 0 210 297" style="touch-action:none"><path d="${OUT}" fill="#c9a58a"/><g fill="#c9a58a"><ellipse cx="114" cy="62" rx="13" ry="16"/><ellipse cx="135" cy="70" rx="8" ry="11"/><ellipse cx="148" cy="82" rx="7" ry="10"/><ellipse cx="156" cy="97" rx="6" ry="9"/><ellipse cx="160" cy="112" rx="5" ry="8"/></g><path d="${OUT}" fill="none" stroke="#1f5fbf" stroke-width="2.5"/><line x1="95" y1="244" x2="114" y2="${py}" stroke="#fff" stroke-dasharray="4 3" opacity=".7"/><circle id="pk" cx="95" cy="244" r="8" fill="#fff" stroke="#1f5fbf" stroke-width="3" style="cursor:grab"/><circle id="pj" cx="114" cy="${py}" r="8" fill="#fff" stroke="#1f5fbf" stroke-width="3" style="cursor:grab"/></svg>`}
+function steps(){const p=POS[S]??-1;$("#steps").innerHTML=t("steps").map((n,i)=>`<div class="step ${i<p?'done':i==p?'on':''}"><i>${i<p?'✓':i+1}</i><b>${n}</b></div>`).join("")}
+function roundsBar(){return `<div class="rounds">${seq.map((s,i)=>`<span class="${i<idx?'d':i==idx?'c':''}">${s[0]=='left'?'L':'R'}${s[1]}</span>`).join("")}</div>`}
+function render(){steps();const m=$("#main");
+ if(S==0)m.innerHTML=`<h1>${t("start")}</h1><p class="sub">${t("startSub")}</p><div class="card"><div class="grid2">
+  <div class="field"><label>${t("pid")}</label><input value="${pid}" id="pid"></div>
+  <div class="field"><label>${t("op")}</label><input placeholder="RF" maxlength="4"></div>
+  <div class="field"><label>${t("age")}</label><input type="number" placeholder="45"></div>
+  <div class="field"><label>${t("sex")}</label><div class="seg"><button class="${sex=='f'?'on':''}" onclick="sex='f';render()">${t("f")}</button><button class="${sex=='m'?'on':''}" onclick="sex='m';render()">${t("m")}</button></div></div>
+  <div class="field" style="grid-column:1/-1"><label>${t("note")}</label><input></div></div>
+  <div class="row"><button class="btn right" onclick="S=2;idx=0;render()">${t("go")} →</button></div></div>`;
+ if(S==1)m.innerHTML=`<div class="teambar">🔒 ${t("teamOnly")}</div><h1>${t("set")}</h1><p class="sub">${t("setSub")}</p><div class="grid2">
+  <div class="card"><label>${t("rnd")}</label><div class="seg"><button class="${total==1?'on':''}" onclick="total=1;mkSeq();render()">${t("r1")}</button><button class="${total==3?'on':''}" onclick="total=3;mkSeq();render()">${t("r3")}</button></div><p class="sub" style="font-size:14px;margin:8px 0 22px">${t("rndNote")}</p>
+   <label>${t("dataf")}</label><input value="D:\\SmartFoot_Data\\"></div>
+  <div class="card"><h2 style="font-size:20px;margin-bottom:4px">${t("cal")}</h2><p class="sub" style="font-size:14px;margin-bottom:10px">${t("calNote")}</p>
+   <div class="kv"><span>${t("calX")}</span><b>0.08452</b></div><div class="kv"><span>${t("calY")}</span><b>0.08490</b></div><div class="kv"><span>${t("calDate")}</span><b>—</b></div><div class="kv"><span>${t("calRuler")}</span><b>Baja 30 cm</b></div><div class="kv"><span>${t("calSpread")}</span><b>±0.2%</b></div>
+   <div class="row" style="margin-top:16px"><button class="btn ghost" style="padding:12px 20px;font-size:16px" onclick="this.nextElementSibling.textContent='${t("calChkOk")}'">${t("calChk")}</button><span class="chip ok"></span><button class="btn right" style="padding:12px 20px;font-size:16px">${t("calDo")}</button></div></div></div>
+  <div class="row" style="margin-top:22px"><button class="btn ghost" onclick="S=0;render()">${t("back")}</button><button class="btn right" onclick="S=5;render()">${t("research")}</button></div>`;
+ if(S==2){const [side,r]=seq[idx];m.innerHTML=`<h1>${t("scan")} · ${t(side)}</h1><p class="sub">${t("scanSub")}</p><div class="grid2"><div class="card"><div class="scanwin">${foot(side,false)}</div></div>
+  <div class="card"><span class="chip">${t("putaran")} ${r}/${total}</span>${roundsBar()}<div id="sstate" style="margin:20px 0 14px;color:var(--mute)">${t("ready")}</div><div class="bar"><b id="sbar"></b></div>
+  <div class="row" style="margin-top:26px"><button class="btn" id="sgo" onclick="scanRun()">${t("doScan")}</button></div></div></div>`}
+ if(S==3){const [side,r]=seq[idx];m.innerHTML=`<h1>${t("review")} · ${t(side)} ${r}/${total}</h1><p class="sub">${t("reviewSub")}</p><div class="grid2"><div class="card"><div class="scanwin" style="background:#10151f">${foot(side,true)}</div></div>
+  <div class="card"><ul class="checks"><li><span class="dot"></span>${t("chk1")}</li><li><span class="dot"></span>${t("chk2")}</li><li><span class="dot"></span>${t("chk3")}</li></ul>
+  <div class="row" style="margin-top:28px"><button class="btn bad" onclick="S=2;render()">↺ ${t("retake")}</button><button class="btn ok right" onclick="accept()">✓ ${t("accept")}</button></div></div></div>`}
+ if(S==4)m.innerHTML=`<h1>${t("done")}</h1><p class="sub">${t("doneSub")}</p><div class="card"><div class="row" style="gap:30px"><div class="big" style="color:var(--ok)">✓</div><div><div style="font-size:22px;font-weight:700">${pid} · ${seq.length} ${t("scans")}</div><div class="sub" style="margin:4px 0 0">${t("saved")} D:\\SmartFoot_Data\\${pid}\\</div></div></div><div class="row" style="margin-top:26px"><button class="btn ghost" onclick="S=5;render()">${t("research")}</button><button class="btn right" onclick="S=0;idx=0;render()">${t("newS")}</button></div></div>`;
+ if(S==5){const rows=seq.map((s,i)=>`<tr><td>${s[0]=='left'?'L':'R'}${s[1]}</td><td>${(248.3+i*.4).toFixed(1)}</td><td>${(96.1-i*.2).toFixed(1)}</td><td>${(112.4+i*.3).toFixed(1)}</td><td>${(0.24+(48-py)*0+ (i==0&&corrected?(py-48)/-900:0)).toFixed(2)}</td><td>0.31</td></tr>`).join("");
+  m.innerHTML=`<div class="teambar">🔒 ${t("teamOnly")}</div><h1>${t("resT")}</h1><p class="sub">${t("resSub")}</p><div class="grid2"><div class="card"><div class="scanwin" style="background:#10151f;max-height:420px">${footPts()}</div><p class="sub" style="font-size:14px;margin:12px 0 6px">${t("pts")}</p><span class="chip ${corrected?'warn':'ok'}">${t("corr")}: ${corrected?t("yes"):t("no")}</span></div>
+  <div class="card"><h2 style="font-size:20px;margin-bottom:10px">${t("tbl")}</h2><table><tr><th>${t("sc")}</th><th>${t("fl")}</th><th>${t("fw")}</th><th>${t("ar")}</th><th>${t("ai")}</th><th>${t("csi")}</th></tr>${rows}</table><p class="sub" style="font-size:14px;margin:14px 0 0">${t("noLabel")}</p></div></div>
+  <div class="row" style="margin-top:22px"><button class="btn ghost" onclick="S=1;render()">${t("back")}</button></div>`;wirePts()}}
+function wirePts(){const svg=$("#psvg");if(!svg)return;let drag=null;
+ const pt=e=>{const p=svg.createSVGPoint();p.x=e.clientX;p.y=e.clientY;return p.matrixTransform(svg.getScreenCTM().inverse())};
+ [["pk"],["pj"]].forEach(([id])=>{const c=$("#"+id);c.onpointerdown=e=>{drag=c;c.setPointerCapture(e.pointerId)};c.onpointermove=e=>{if(drag!==c)return;const p=pt(e);c.setAttribute("cx",p.x);c.setAttribute("cy",p.y);if(id=="pj")py=p.y;corrected=true;svg.querySelector("line").setAttribute("x1",$("#pk").getAttribute("cx"));svg.querySelector("line").setAttribute("y1",$("#pk").getAttribute("cy"));svg.querySelector("line").setAttribute("x2",$("#pj").getAttribute("cx"));svg.querySelector("line").setAttribute("y2",$("#pj").getAttribute("cy"))};c.onpointerup=()=>{drag=null;const ch=$(".chip");ch.className="chip warn";ch.textContent=t("corr")+": "+t("yes")}})}
+function scanRun(){$("#sgo").style.opacity=.4;$("#sgo").style.pointerEvents="none";$("#sstate").textContent=t("scanning");let p=0;const iv=setInterval(()=>{p+=7;$("#sbar").style.width=Math.min(p,100)+"%";if(p>=100){clearInterval(iv);S=3;render()}},150)}
+function accept(){if(idx<seq.length-1){idx++;S=2}else S=4;render()}
+$("#lang").onclick=()=>{L=L=="id"?"en":"id";render()};
+$("aside .row").insertAdjacentHTML("afterbegin",`<button class="lang" id="teamBtn">${t("team")}</button>`);
+$("#teamBtn").onclick=()=>{S=S==1?0:1;render()};
+const _r=render;render=function(){_r();$("#teamBtn").textContent=t("team")};
+render();
+</script>
+</body>
+</html>
