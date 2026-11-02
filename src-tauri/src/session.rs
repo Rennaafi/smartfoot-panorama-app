@@ -5,6 +5,7 @@
 //!                                  \_pending\               scan waiting for Accept / Retake
 //!                                  \rejected\               scans the operator retook (kept, never silently deleted)
 
+use crate::measure::Measurements;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
@@ -52,6 +53,9 @@ pub struct ScanEntry {
     pub accepted_at: String,
     /// Plain-language warnings the operator accepted anyway (empty = clean).
     pub warnings: Vec<String>,
+    /// Filled in right after Accept; None if no foot could be measured.
+    #[serde(default)]
+    pub measurements: Option<Measurements>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -171,7 +175,16 @@ pub fn accept(dir: &Path, side: &str, round: u8, seconds: f64, w: u32, h: u32, w
         dpi: 300,
         accepted_at: now_iso(),
         warnings,
+        measurements: None,
     });
+    write_session(dir, &s)
+}
+
+/// Store (or replace) the measurements of one accepted scan.
+pub fn set_measurements(dir: &Path, side: &str, round: u8, m: Option<Measurements>) -> Result<(), String> {
+    let mut s = read_session(dir)?;
+    let e = s.scans.iter_mut().find(|e| e.side == side && e.round == round).ok_or("scan not found in session")?;
+    e.measurements = m;
     write_session(dir, &s)
 }
 
@@ -207,6 +220,78 @@ pub fn complete(dir: &Path) -> Result<(), String> {
     write_session(dir, &s)
 }
 
+#[derive(Serialize, Clone, Debug)]
+pub struct SessionSummary {
+    pub pid: String,
+    pub created: String,
+    pub operator: String,
+    pub scans: usize,
+    pub completed: bool,
+    pub cancelled: bool,
+}
+
+/// All sessions in the data folder, newest first.
+pub fn list_sessions(data_dir: &Path) -> Vec<SessionSummary> {
+    let mut v: Vec<SessionSummary> = std::fs::read_dir(data_dir)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .filter_map(|e| read_session(&e.path()).ok())
+        .map(|s| SessionSummary { pid: s.pid, created: s.created, operator: s.operator, scans: s.scans.len(), completed: s.completed, cancelled: s.cancelled })
+        .collect();
+    v.sort_by(|a, b| b.created.cmp(&a.created));
+    v
+}
+
+fn csv_field(s: &str) -> String {
+    if s.contains([',', '"', '\n']) { format!("\"{}\"", s.replace('"', "\"\"")) } else { s.to_string() }
+}
+
+/// Rebuild `measurements.csv` (one row per accepted scan) from every session.json, so the file can
+/// never disagree with the sessions, even after a hand correction.
+pub fn rebuild_csv(data_dir: &Path) -> Result<PathBuf, String> {
+    let mut sessions: Vec<SessionFile> = std::fs::read_dir(data_dir)
+        .map_err(|e| e.to_string())?
+        .flatten()
+        .filter_map(|e| read_session(&e.path()).ok())
+        .collect();
+    sessions.sort_by(|a, b| a.pid.cmp(&b.pid));
+    let mut out = String::from("pid,created,operator,age,sex,rounds,side,round,attempt,scan_file,calibrated,mm_per_px_x,mm_per_px_y,fl_mm,fw_mm,area_cm2,toeless_area_cm2,hind_cm2,mid_cm2,fore_cm2,ai,csi_pct,toe_base_method,toeless_frac,points_corrected,warnings\n");
+    for s in &sessions {
+        let mut scans = s.scans.clone();
+        scans.sort_by(|a, b| (a.round, &a.side).cmp(&(b.round, &b.side)));
+        for e in &scans {
+            let mut f: Vec<String> = vec![s.pid.clone(), s.created.clone(), s.operator.clone(), s.age.map(|a| a.to_string()).unwrap_or_default(), s.sex.clone(), s.rounds.to_string(), e.side.clone(), e.round.to_string(), e.attempt.to_string(), e.file.clone()];
+            match &e.measurements {
+                Some(m) => f.extend([
+                    m.scale.calibrated.to_string(),
+                    format!("{:.5}", m.scale.x_mm_per_px),
+                    format!("{:.5}", m.scale.y_mm_per_px),
+                    format!("{:.1}", m.fl_mm),
+                    format!("{:.1}", m.fw_mm),
+                    format!("{:.1}", m.area_cm2),
+                    format!("{:.1}", m.toeless_area_cm2),
+                    format!("{:.1}", m.hind_cm2),
+                    format!("{:.1}", m.mid_cm2),
+                    format!("{:.1}", m.fore_cm2),
+                    format!("{:.3}", m.ai),
+                    format!("{:.1}", m.csi_pct),
+                    m.toe_base_method.clone(),
+                    format!("{:.3}", m.toeless_frac),
+                    m.corrected.to_string(),
+                ]),
+                None => f.extend(std::iter::repeat(String::new()).take(15)),
+            }
+            f.push(e.warnings.join(";"));
+            out.push_str(&f.iter().map(|x| csv_field(x)).collect::<Vec<_>>().join(","));
+            out.push('\n');
+        }
+    }
+    let path = data_dir.join("measurements.csv");
+    std::fs::write(&path, out).map_err(|e| format!("cannot write measurements.csv: {e}"))?;
+    Ok(path)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -226,6 +311,19 @@ mod tests {
         assert_eq!(next_pid(&d), "SFP-0002");
         assert!(create_session(&d, "SFP-0001", "RF", None, "m", "", 3, "x").unwrap_err().starts_with("ID_USED"));
         assert_eq!(clean_pid(" SFP 0003/../ ").unwrap(), "SFP0003");
+    }
+
+    #[test]
+    fn csv_has_one_row_per_scan_and_survives_missing_measurements() {
+        let d = tmp("csv");
+        let dir = create_session(&d, "SFP-0001", "R,F", Some(30), "m", "", 1, "x").unwrap();
+        std::fs::write(dir.join("_pending/right_1.png"), b"a").unwrap();
+        accept(&dir, "right", 1, 15.0, 10, 10, vec!["EDGE".into()]).unwrap();
+        let p = rebuild_csv(&d).unwrap();
+        let text = std::fs::read_to_string(p).unwrap();
+        assert_eq!(text.lines().count(), 2);
+        assert!(text.lines().nth(1).unwrap().contains("\"R,F\"") && text.contains("EDGE"));
+        assert_eq!(list_sessions(&d).len(), 1);
     }
 
     #[test]

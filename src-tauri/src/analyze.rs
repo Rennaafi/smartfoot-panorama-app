@@ -24,6 +24,8 @@ pub struct Analysis {
 const DOWN: u32 = 4;
 /// Widest stretch on one edge still treated as a limb entering (ankle/wrist), in mm.
 const LIMB_MAX_MM: f32 = 80.0;
+/// Pixels above this fraction of the Otsu threshold count as foot when connected to a strong pixel.
+const WEAK_FRAC: f32 = 0.55;
 const STRIP: u32 = 20; // rows used for the background estimate (preview pixels)
 
 pub fn analyze(path: &Path) -> Result<Analysis, String> {
@@ -32,7 +34,18 @@ pub fn analyze(path: &Path) -> Result<Analysis, String> {
     Ok(analyze_image(&img))
 }
 
-pub fn analyze_image(img: &RgbImage) -> Analysis {
+/// Result of finding the foot: the cleaned mask plus the numbers behind it.
+pub struct Seg {
+    pub mask: Vec<bool>,
+    pub score: Vec<u8>,
+    pub thr: u8,
+    pub w: u32,
+    pub h: u32,
+}
+
+/// `down` = how many scan pixels one pixel of `img` covers; sizes below were tuned at 4.
+pub fn segment(img: &RgbImage, down: u32) -> Seg {
+    let k = (4 / down.max(1)).max(1);
     let (w, h) = img.dimensions();
     let (wu, hu) = (w as usize, h as usize);
 
@@ -53,8 +66,8 @@ pub fn analyze_image(img: &RgbImage) -> Analysis {
         }
         m
     };
-    let top: Vec<[f32; 3]> = (0..wu).map(|x| med(0..STRIP.min(h), x)).collect();
-    let bot: Vec<[f32; 3]> = (0..wu).map(|x| med(h.saturating_sub(STRIP)..h, x)).collect();
+    let top: Vec<[f32; 3]> = (0..wu).map(|x| med(0..(STRIP * k).min(h), x)).collect();
+    let bot: Vec<[f32; 3]> = (0..wu).map(|x| med(h.saturating_sub(STRIP * k)..h, x)).collect();
     let mut all: [Vec<f32>; 3] = [vec![], vec![], vec![]];
     for x in 0..wu {
         for c in 0..3 {
@@ -71,7 +84,7 @@ pub fn analyze_image(img: &RgbImage) -> Analysis {
     let bg: Vec<[f32; 3]> = (0..wu).map(|x| if dist(&top[x]) <= dist(&bot[x]) { top[x] } else { bot[x] }).collect();
     let bg: Vec<[f32; 3]> = (0..wu)
         .map(|x| {
-            let (a, b) = (x.saturating_sub(6), (x + 6).min(wu - 1));
+            let (a, b) = (x.saturating_sub(6 * k as usize), (x + 6 * k as usize).min(wu - 1));
             let mut s = [0f32; 3];
             for i in a..=b {
                 for c in 0..3 {
@@ -96,15 +109,28 @@ pub fn analyze_image(img: &RgbImage) -> Analysis {
 
     // 3. Otsu threshold
     let thr = otsu(&score);
-    let mut mask: Vec<bool> = score.iter().map(|&s| s > thr).collect();
+    // hysteresis: strong pixels (above Otsu) grow into weaker neighbours, so soft edges such as a raised
+    // thumb or the lifted arch stay attached without picking up lone background noise
+    let mut mask = hysteresis(&score, wu, hu, thr, (thr as f32 * WEAK_FRAC) as u8);
 
     // 4. clean up: open (remove specks), close (fill gaps), largest blob, fill holes
-    mask = morph(&mask, wu, hu, 2, false);
-    mask = morph(&mask, wu, hu, 2, true);
-    mask = morph(&mask, wu, hu, 3, true);
-    mask = morph(&mask, wu, hu, 3, false);
+    let r2 = 2 * k as usize;
+    // closing radius ~0.6 mm: seals pinholes but not the real gaps between toes
+    let r3 = ((0.6 / (down.max(1) as f32 * 25.4 / 300.0)).round() as usize).max(1);
+    mask = morph(&mask, wu, hu, r2, false);
+    mask = morph(&mask, wu, hu, r2, true);
+    mask = morph(&mask, wu, hu, r3, true);
+    mask = morph(&mask, wu, hu, r3, false);
     mask = largest_blob(&mask, wu, hu);
-    mask = fill_holes(&mask, wu, hu);
+    // only small holes (< 2 cm^2) are filled; a big pocket between toes must stay open
+    let max_hole_px = (200.0 / (down.max(1) as f32 * 25.4 / 300.0).powi(2)) as usize;
+    mask = fill_holes(&mask, wu, hu, max_hole_px);
+    Seg { mask, score, thr, w, h }
+}
+
+pub fn analyze_image(img: &RgbImage) -> Analysis {
+    let Seg { mask, score, thr, w, h } = segment(img, DOWN);
+    let (wu, hu) = (w as usize, h as usize);
 
     let count = mask.iter().filter(|&&m| m).count();
     let area_frac = count as f32 / (wu * hu) as f32;
@@ -179,6 +205,28 @@ pub fn analyze_image(img: &RgbImage) -> Analysis {
         preview_w: w,
         preview_h: h,
     }
+}
+
+fn hysteresis(score: &[u8], w: usize, h: usize, strong: u8, weak: u8) -> Vec<bool> {
+    let mut on = vec![false; w * h];
+    let mut stack: Vec<usize> = (0..w * h).filter(|&i| score[i] > strong).collect();
+    for &i in &stack {
+        on[i] = true;
+    }
+    while let Some(p) = stack.pop() {
+        let (x, y) = (p % w, p / w);
+        let mut push = |q: usize| {
+            if !on[q] && score[q] > weak {
+                on[q] = true;
+                stack.push(q);
+            }
+        };
+        if x > 0 { push(p - 1); }
+        if x + 1 < w { push(p + 1); }
+        if y > 0 { push(p - w); }
+        if y + 1 < h { push(p + w); }
+    }
+    on
 }
 
 fn otsu(score: &[u8]) -> u8 {
@@ -272,7 +320,7 @@ fn largest_blob(m: &[bool], w: usize, h: usize) -> Vec<bool> {
     label.iter().map(|&l| l == best_id && best_id != 0).collect()
 }
 
-fn fill_holes(m: &[bool], w: usize, h: usize) -> Vec<bool> {
+fn fill_holes(m: &[bool], w: usize, h: usize, max_px: usize) -> Vec<bool> {
     let mut outside = vec![false; w * h];
     let mut stack = Vec::new();
     for x in 0..w {
@@ -298,7 +346,38 @@ fn fill_holes(m: &[bool], w: usize, h: usize) -> Vec<bool> {
         if y > 0 { push(p - w); }
         if y + 1 < h { push(p + w); }
     }
-    (0..w * h).map(|i| m[i] || !outside[i]).collect()
+    // holes = background not reachable from the border; fill only the small ones
+    let mut out = m.to_vec();
+    let mut seen = vec![false; w * h];
+    for s in 0..w * h {
+        if m[s] || outside[s] || seen[s] {
+            continue;
+        }
+        let mut comp = vec![s];
+        seen[s] = true;
+        let mut i = 0;
+        while i < comp.len() {
+            let p = comp[i];
+            i += 1;
+            let (x, y) = (p % w, p / w);
+            let mut push = |q: usize| {
+                if !m[q] && !outside[q] && !seen[q] {
+                    seen[q] = true;
+                    comp.push(q);
+                }
+            };
+            if x > 0 { push(p - 1); }
+            if x + 1 < w { push(p + 1); }
+            if y > 0 { push(p - w); }
+            if y + 1 < h { push(p + w); }
+        }
+        if comp.len() <= max_px {
+            for &q in &comp {
+                out[q] = true;
+            }
+        }
+    }
+    out
 }
 
 #[cfg(test)]

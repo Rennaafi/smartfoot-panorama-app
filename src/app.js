@@ -28,6 +28,13 @@ const T = {
     e_BUSY: "Pemindai sedang sibuk. Tunggu beberapa detik lalu coba lagi.",
     e_SCAN_FAILED: "Pemindaian gagal", e_ID_USED: "ID ini sudah dipakai. Gunakan ID lain.", e_EMPTY_ID: "ID pasien kosong.", e_OP: "Isi inisial operator.",
     retry: "Coba lagi",
+    resBtn: "Layar riset →", res: "Layar riset", resSub: "Angka ukuran dari pemindaian. Tanpa label datar/normal/tinggi.",
+    resNone: "Belum ada sesi yang selesai.", resSess: "Sesi", resPts: "Seret dua titik putih: pusat tumit (bawah) dan ujung jari ke-2 (atas), lalu lepas. Angka dihitung ulang.",
+    resCorr: "Titik dikoreksi", yes: "ya", no: "tidak", resAuto: "Titik otomatis",
+    resUncal: "Belum dikalibrasi: angka memakai 300 dpi nominal, jangan dipakai sebagai hasil akhir.", resNoMeas: "Pemindaian ini tidak bisa diukur (kaki tidak ditemukan).",
+    resNoLabel: "Tidak ada label klasifikasi. Batas AI belum divalidasi untuk posisi duduk.",
+    resGap: "Dasar jari dari celah antar jari", resProp: "Dasar jari diperkirakan 75% panjang (jari menempel)", resCsv: "File CSV",
+    kFL: "Panjang kaki", kFW: "Lebar kaki", kArea: "Luas kontak", kToeless: "Luas tanpa jari", kA: "Tumit (A)", kB: "Lengkung (B)", kC: "Depan (C)", kAI: "Arch index (AI)", kCSI: "Chippaux-Smirak (%)",
   },
   en: {
     steps: ["Start", "Scan", "Review", "Done"], team: "⚙ Team",
@@ -54,6 +61,13 @@ const T = {
     e_BUSY: "The scanner is busy. Wait a few seconds and try again.",
     e_SCAN_FAILED: "Scan failed", e_ID_USED: "This ID is already used. Pick another ID.", e_EMPTY_ID: "The patient ID is empty.", e_OP: "Enter the operator initials.",
     retry: "Try again",
+    resBtn: "Research screen →", res: "Research screen", resSub: "Size numbers from the scans. No flat/normal/high label.",
+    resNone: "No finished session yet.", resSess: "Session", resPts: "Drag the two white points: heel centre (bottom) and 2nd-toe tip (top), then release. Numbers are recalculated.",
+    resCorr: "Points corrected", yes: "yes", no: "no", resAuto: "Automatic points",
+    resUncal: "Not calibrated: numbers use nominal 300 dpi, do not use them as final results.", resNoMeas: "This scan could not be measured (no foot found).",
+    resNoLabel: "No classification label. AI cutoffs are not validated for seated posture.",
+    resGap: "Toe base from the gaps between toes", resProp: "Toe base estimated at 75% of length (toes touching)", resCsv: "CSV file",
+    kFL: "Foot length", kFW: "Foot width", kArea: "Contact area", kToeless: "Area without toes", kA: "Hindfoot (A)", kB: "Midfoot (B)", kC: "Forefoot (C)", kAI: "Arch index (AI)", kCSI: "Chippaux-Smirak (%)",
   },
 };
 
@@ -92,6 +106,95 @@ function wireCancel() {
     try { await invoke("cancel_session", { pid: st.sess.pid }); } catch (e) { st.error = e; render(); return; }
     st.form = { pid: "", op: st.form.op, age: "", sex: "f", note: "" }; st.sess = null; st.scan = null; st.error = ""; st.screen = "start"; render();
   };
+}
+
+// ---- research screen (team only) ----
+const rs = { sessions: [], pid: null, sess: null, cur: null, view: null, busy: false };
+async function loadView() { rs.view = rs.cur ? await invoke("get_scan_view", { pid: rs.pid, side: rs.cur.side, round: rs.cur.round }) : null; }
+async function loadSession() {
+  rs.sess = rs.pid ? await invoke("get_session", { pid: rs.pid }) : null;
+  const f = rs.sess?.scans[0];
+  rs.cur = f ? { side: f.side, round: f.round } : null;
+  await loadView();
+}
+async function openResearch() {
+  try {
+    rs.sessions = (await invoke("list_sessions")).filter((x) => x.scans > 0);
+    if (!rs.sessions.find((x) => x.pid === rs.pid)) rs.pid = rs.sessions[0]?.pid ?? null;
+    await loadSession(); st.error = "";
+  } catch (e) { st.error = e; }
+  st.screen = "research"; render();
+}
+const f1 = (x, d = 1) => (x == null ? "–" : Number(x).toFixed(d));
+function overlayAndNumbers() {
+  const v = rs.view, m = v?.measurements;
+  if (!v) return { svg: "", nums: "" };
+  let g = "";
+  if (m) {
+    const d = v.down, pt = (q) => [q[0] / d, q[1] / d], H = pt(m.heel_centre), J = pt(m.toe_tip), E = pt(m.heel_end);
+    const l = Math.hypot(J[0] - H[0], J[1] - H[1]) || 1, a = [(J[0] - H[0]) / l, (J[1] - H[1]) / l], b = [-a[1], a[0]];
+    const ppm = 1 / (m.scale.x_mm_per_px * d), half = (m.fw_mm / 2) * 1.15 * ppm, Lt = m.toeless_frac * m.fl_mm * ppm;
+    for (let i = 0; i <= 3; i++) {
+      const P = [E[0] + a[0] * Lt * i / 3, E[1] + a[1] * Lt * i / 3];
+      g += `<line x1="${P[0] - b[0] * half}" y1="${P[1] - b[1] * half}" x2="${P[0] + b[0] * half}" y2="${P[1] + b[1] * half}" stroke="${i == 3 ? "#ffd166" : "#ffffff"}" stroke-width="${i == 3 ? 3 : 1.5}" stroke-dasharray="${i == 3 ? "8 5" : "3 5"}" opacity=".85"/>`;
+    }
+    g += `<line x1="${E[0]}" y1="${E[1]}" x2="${J[0]}" y2="${J[1]}" stroke="#fff" stroke-width="2" stroke-dasharray="6 4" opacity=".8"/>`;
+    g += `<circle id="ph" cx="${H[0]}" cy="${H[1]}" r="11" fill="#fff" stroke="#1f5fbf" stroke-width="4" style="cursor:grab"/><circle id="pj" cx="${J[0]}" cy="${J[1]}" r="11" fill="#fff" stroke="#1f5fbf" stroke-width="4" style="cursor:grab"/>`;
+  }
+  const svg = `<svg id="rsvg" viewBox="0 0 ${v.preview_w} ${v.preview_h}" style="touch-action:none;width:100%;height:100%"><image href="${v.preview}" width="${v.preview_w}" height="${v.preview_h}"/>${g}</svg>`;
+  const kv = (k, val) => `<div class="kv"><span>${t(k)}</span><b>${val}</b></div>`;
+  const nums = !m ? `<div class="warn">${t("resNoMeas")}</div>` :
+    `${kv("kFL", f1(m.fl_mm) + " mm")}${kv("kFW", f1(m.fw_mm) + " mm")}${kv("kArea", f1(m.area_cm2) + " cm²")}${kv("kToeless", f1(m.toeless_area_cm2) + " cm²")}${kv("kA", f1(m.hind_cm2) + " cm²")}${kv("kB", f1(m.mid_cm2) + " cm²")}${kv("kC", f1(m.fore_cm2) + " cm²")}${kv("kAI", f1(m.ai, 3))}${kv("kCSI", f1(m.csi_pct))}
+     <p class="muted" style="margin:12px 0 4px">${m.toe_base_method === "gap" ? t("resGap") : t("resProp")}</p>
+     <span class="chip ${m.corrected ? "warn" : "ok"}">${t("resCorr")}: ${m.corrected ? t("yes") : t("no")}</span>
+     ${m.scale.calibrated ? "" : `<div class="warn" style="margin-top:14px">${t("resUncal")}</div>`}`;
+  return { svg, nums };
+}
+function wireResearchDrag() {
+  const svg = $("#rsvg"); if (!svg || !$("#ph")) return;
+  const toSvg = (e) => { const q = svg.createSVGPoint(); q.x = e.clientX; q.y = e.clientY; return q.matrixTransform(svg.getScreenCTM().inverse()); };
+  let drag = null;
+  ["ph", "pj"].forEach((id) => {
+    const c = $("#" + id);
+    c.onpointerdown = (e) => { drag = c; c.setPointerCapture(e.pointerId); };
+    c.onpointermove = (e) => { if (drag !== c) return; const q = toSvg(e); c.setAttribute("cx", q.x); c.setAttribute("cy", q.y); };
+    c.onpointerup = async () => {
+      if (drag !== c) return; drag = null;
+      const d = rs.view.down, at = (i, k) => Number($(i).getAttribute(k)) * d;
+      await remeasure([at("#ph", "cx"), at("#ph", "cy")], [at("#pj", "cx"), at("#pj", "cy")]);
+    };
+  });
+}
+async function remeasure(heel, toe) {
+  rs.busy = true; $("#rsnums").style.opacity = ".4";
+  try { rs.view.measurements = await invoke("remeasure", { pid: rs.pid, side: rs.cur.side, round: rs.cur.round, heel, toe }); st.error = ""; }
+  catch (e) { st.error = e; }
+  rs.busy = false; paintResearch();
+}
+function paintResearch() {
+  const o = overlayAndNumbers();
+  $("#rsimg").innerHTML = o.svg; $("#rsnums").innerHTML = o.nums; $("#rsnums").style.opacity = "1";
+  wireResearchDrag();
+}
+function researchScreen(m) {
+  const back = () => { st.screen = "settings"; render(); };
+  if (!rs.sessions.length) {
+    m.innerHTML = `<div class="teambar">🔒 ${t("teamOnly")}</div><h1>${t("res")}</h1>${errBox()}<div class="card"><p class="sub" style="margin:0">${t("resNone")}</p></div><div class="row" style="margin-top:22px"><button class="btn ghost" id="rback">${t("back")}</button></div>`;
+    $("#rback").onclick = back; return;
+  }
+  m.innerHTML = `<div class="teambar">🔒 ${t("teamOnly")}</div><h1>${t("res")}</h1><p class="sub">${t("resSub")}</p>${errBox()}
+    <div class="row" style="margin-bottom:16px"><label style="margin:0">${t("resSess")}</label><select id="rs_sess" style="width:auto">${rs.sessions.map((x) => `<option ${x.pid == rs.pid ? "selected" : ""}>${esc(x.pid)}</option>`).join("")}</select>
+      <div class="seg" style="flex:none">${(rs.sess?.scans ?? []).map((x) => `<button data-sc="${x.side}|${x.round}" class="${rs.cur && rs.cur.side == x.side && rs.cur.round == x.round ? "on" : ""}" style="padding:10px 16px">${x.side == "left" ? "L" : "R"}${x.round}</button>`).join("")}</div></div>
+    <div class="grid2"><div class="card"><div class="scanwin" id="rsimg" style="background:#10151f"></div><p class="muted" style="margin:12px 0 0">${t("resPts")}</p>
+      <div class="row" style="margin-top:12px"><button class="btn ghost" id="rs_auto" style="padding:10px 16px;font-size:15px">${t("resAuto")}</button></div></div>
+    <div class="card" id="rsnums"></div></div>
+    <p class="muted" style="margin-top:14px">${t("resNoLabel")}</p><p class="muted">${t("resCsv")}: ${esc(rs.view?.csv ?? "")}</p>
+    <div class="row" style="margin-top:12px"><button class="btn ghost" id="rback">${t("back")}</button></div>`;
+  paintResearch();
+  $("#rs_sess").onchange = async (e) => { rs.pid = e.target.value; try { await loadSession(); } catch (x) { st.error = x; } render(); };
+  m.querySelectorAll("[data-sc]").forEach((b) => (b.onclick = async () => { const [side, round] = b.dataset.sc.split("|"); rs.cur = { side, round: Number(round) }; try { await loadView(); } catch (x) { st.error = x; } render(); }));
+  $("#rs_auto").onclick = () => remeasure(null, null);
+  $("#rback").onclick = back;
 }
 
 async function render() {
@@ -174,6 +277,8 @@ async function render() {
     $("#new").onclick = () => { st.form = { pid: "", op: st.form.op, age: "", sex: "f", note: "" }; st.sess = null; st.screen = "start"; render(); };
   }
 
+  if (s === "research") researchScreen(m);
+
   if (s === "settings") {
     const c = st.settings;
     m.innerHTML = `<div class="teambar">🔒 ${t("teamOnly")}</div><h1>${t("set")}</h1><p class="sub">${t("setSub")}</p>${errBox()}<div class="grid2">
@@ -181,7 +286,8 @@ async function render() {
         <label>${t("dataf")}</label><div class="row"><input id="s_dir" value="${esc(c.data_dir)}" style="flex:1"><button class="btn ghost" id="s_save" style="padding:12px 18px;font-size:16px">${t("save")}</button></div>
         <label style="margin-top:22px">${t("scanner")}</label><div class="row"><select id="s_dev" style="flex:1"><option value="">${t("auto")}</option>${st.scanners.map((d) => `<option ${c.scanner == d ? "selected" : ""}>${esc(d)}</option>`).join("")}</select><button class="btn ghost" id="s_ref" style="padding:12px 18px;font-size:16px">${t("refresh")}</button></div></div>
       <div class="card"><h2 style="font-size:20px;margin-bottom:6px">${t("cal")}</h2><p class="muted">${t("calNote")}</p></div></div>
-      <div class="row" style="margin-top:22px"><button class="btn ghost" id="back">${t("back")}</button></div>`;
+      <div class="row" style="margin-top:22px"><button class="btn ghost" id="back">${t("back")}</button><button class="btn right" id="gores">${t("resBtn")}</button></div>`;
+    $("#gores").onclick = openResearch;
     const persist = async (patch) => { try { st.settings = await invoke("set_settings", { new: { ...st.settings, ...patch } }); st.error = ""; } catch (e) { st.error = e; } render(); };
     m.querySelectorAll("[data-r]").forEach((b) => (b.onclick = () => persist({ rounds: Number(b.dataset.r) })));
     $("#s_save").onclick = () => persist({ data_dir: $("#s_dir").value.trim() });
