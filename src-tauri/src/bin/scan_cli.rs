@@ -22,7 +22,7 @@ fn main() {
         Some("analyze") if a.len() == 3 => match analyze::analyze(Path::new(&a[1])) {
             Ok(r) => {
                 std::fs::write(&a[2], &r.preview_png).expect("write preview");
-                println!("found={} touches_edge={} clear={} area={:.1}% bbox={:?} -> {}", r.found, r.touches_edge, r.clear, r.area_frac * 100.0, r.bbox, a[2]);
+                println!("found={} touches_edge={} limb_at_edge={} clear={} area={:.1}% bbox={:?} -> {}", r.found, r.touches_edge, r.limb_at_edge, r.clear, r.area_frac * 100.0, r.bbox, a[2]);
             }
             Err(e) => eprintln!("error: {e}"),
         },

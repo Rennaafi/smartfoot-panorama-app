@@ -84,11 +84,11 @@ const roundsBar = () => `<div class="rounds">${st.sess.seq.map((s, i) => `<span 
 const OUT = "M112 258c-16 8-38 6-44-12-6-20 4-44 2-70-2-26-20-52-12-86 7-30 34-44 56-36 24 8 30 40 26 70-3 24 6 46 8 70 2 22-8 56-36 64z";
 const guideFoot = (side) => `<svg viewBox="0 0 210 297"><g transform="${side == "left" ? "translate(210,0) scale(-1,1)" : ""}" opacity=".55"><path d="${OUT}" fill="#d7b79e"/><g fill="#d7b79e"><ellipse cx="114" cy="62" rx="13" ry="16"/><ellipse cx="135" cy="70" rx="8" ry="11"/><ellipse cx="148" cy="82" rx="7" ry="10"/><ellipse cx="156" cy="97" rx="6" ry="9"/><ellipse cx="160" cy="112" rx="5" ry="8"/></g></g></svg>`;
 
-const cancelBtn = () => `<div class="row" style="margin-top:22px"><button class="btn ghost" id="cancel" style="padding:10px 18px;font-size:15px">${t("cancel")}</button></div>`;
+const cancelBtn = () => `<div class="row" style="margin-top:22px"><button class="btn bad" id="cancel" style="padding:10px 18px;font-size:15px">${t("cancel")}</button></div>`;
 function wireCancel() {
   const b = $("#cancel"); if (!b) return; let armed = false;
   b.onclick = async () => {
-    if (!armed) { armed = true; b.textContent = t("cancelSure"); b.classList.add("bad"); setTimeout(() => { armed = false; if (b.isConnected) { b.textContent = t("cancel"); b.classList.remove("bad"); } }, 4000); return; }
+    if (!armed) { armed = true; b.textContent = t("cancelSure"); b.classList.add("armed"); setTimeout(() => { armed = false; if (b.isConnected) { b.textContent = t("cancel"); b.classList.remove("armed"); } }, 4000); return; }
     try { await invoke("cancel_session", { pid: st.sess.pid }); } catch (e) { st.error = e; render(); return; }
     st.form = { pid: "", op: st.form.op, age: "", sex: "f", note: "" }; st.sess = null; st.scan = null; st.error = ""; st.screen = "start"; render();
   };

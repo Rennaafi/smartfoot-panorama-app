@@ -12,6 +12,8 @@ pub struct Analysis {
     pub preview_png: Vec<u8>,
     pub found: bool,
     pub touches_edge: bool,
+    /// A single narrow stretch touches one edge: an ankle or wrist coming in, not a cut-off foot.
+    pub limb_at_edge: bool,
     pub clear: bool,
     pub area_frac: f32,
     pub bbox: Option<[u32; 4]>, // x0,y0,x1,y1 in preview pixels
@@ -20,6 +22,8 @@ pub struct Analysis {
 }
 
 const DOWN: u32 = 4;
+/// Widest stretch on one edge still treated as a limb entering (ankle/wrist), in mm.
+const LIMB_MAX_MM: f32 = 80.0;
 const STRIP: u32 = 20; // rows used for the background estimate (preview pixels)
 
 pub fn analyze(path: &Path) -> Result<Analysis, String> {
@@ -107,7 +111,10 @@ pub fn analyze_image(img: &RgbImage) -> Analysis {
     let found = thr >= 8 && area_frac > 0.02 && area_frac < 0.85;
 
     // 5. edge contact and separation quality
-    let mut edge_px = 0;
+    // contact with each edge: pixel count and the stretch it covers (left, right, top, bottom)
+    let mut cnt = [0u32; 4];
+    let mut lo = [u32::MAX; 4];
+    let mut hi = [0u32; 4];
     let (mut x0, mut y0, mut x1, mut y1) = (w, h, 0u32, 0u32);
     for y in 0..hu {
         for x in 0..wu {
@@ -116,13 +123,21 @@ pub fn analyze_image(img: &RgbImage) -> Analysis {
                 y0 = y0.min(y as u32);
                 x1 = x1.max(x as u32);
                 y1 = y1.max(y as u32);
-                if x <= 1 || y <= 1 || x + 2 >= wu || y + 2 >= hu {
-                    edge_px += 1;
+                for (i, hit, along) in [(0, x <= 1, y), (1, x + 2 >= wu, y), (2, y <= 1, x), (3, y + 2 >= hu, x)] {
+                    if hit {
+                        cnt[i] += 1;
+                        lo[i] = lo[i].min(along as u32);
+                        hi[i] = hi[i].max(along as u32);
+                    }
                 }
             }
         }
     }
-    let touches_edge = edge_px >= 5;
+    let px_per_mm = 300.0 / 25.4 / DOWN as f32;
+    let touched: Vec<usize> = (0..4).filter(|&i| cnt[i] >= 5).collect();
+    let narrow_single = touched.len() == 1 && ((hi[touched[0]] - lo[touched[0]]) as f32 / px_per_mm) <= LIMB_MAX_MM;
+    let touches_edge = !touched.is_empty() && !narrow_single;
+    let limb_at_edge = narrow_single;
     let (mut fs, mut fn_, mut bs, mut bn) = (0f64, 0f64, 0f64, 0f64);
     for i in 0..wu * hu {
         if mask[i] {
@@ -157,6 +172,7 @@ pub fn analyze_image(img: &RgbImage) -> Analysis {
         preview_png: png,
         found,
         touches_edge,
+        limb_at_edge,
         clear,
         area_frac,
         bbox: if count > 0 { Some([x0, y0, x1, y1]) } else { None },
@@ -309,10 +325,32 @@ mod tests {
         assert!((48..=52).contains(&x0) && (108..=112).contains(&x1) && (38..=42).contains(&y0) && (178..=182).contains(&y1), "{:?}", a.bbox);
     }
 
+    /// Sensor-like background (small deterministic noise) with skin-coloured pixels where `fg` is true.
+    fn scene(w: u32, h: u32, fg: impl Fn(f32, f32) -> bool) -> RgbImage {
+        RgbImage::from_fn(w, h, |x, y| {
+            if fg(x as f32, y as f32) {
+                Rgb([215, 170, 150])
+            } else {
+                let n = ((x * 7 + y * 13) % 13) as i32 - 6;
+                Rgb([(110 + n) as u8, (110 + n) as u8, (116 + n) as u8])
+            }
+        })
+    }
+
     #[test]
     fn flags_edge_contact() {
-        let a = analyze_image(&synthetic(true));
-        assert!(a.touches_edge);
+        // a wide shape (about 350 px = 120 mm) cut off by the top edge is a cut-off foot
+        let a = analyze_image(&scene(700, 900, |x, y| ((x - 350.0) / 180.0).powi(2) + ((y - 60.0) / 300.0).powi(2) < 1.0));
+        assert!(a.touches_edge && !a.limb_at_edge);
+    }
+
+    #[test]
+    fn narrow_limb_entering_is_not_a_cutoff() {
+        // a forearm about 100 px (34 mm) wide running off the right edge
+        let a = analyze_image(&scene(700, 900, |x, y| {
+            ((x - 300.0) / 150.0).powi(2) + ((y - 450.0) / 200.0).powi(2) < 1.0 || (x > 300.0 && (400.0..500.0).contains(&y))
+        }));
+        assert!(a.found && a.limb_at_edge && !a.touches_edge, "found={} limb={} edge={}", a.found, a.limb_at_edge, a.touches_edge);
     }
 
     #[test]
