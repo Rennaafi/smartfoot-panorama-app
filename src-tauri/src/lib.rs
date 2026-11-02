@@ -14,7 +14,14 @@ fn settings_file(app: &tauri::AppHandle) -> Result<PathBuf, String> {
 }
 
 fn settings(app: &tauri::AppHandle) -> Result<Settings, String> {
-    Ok(session::load_settings(&settings_file(app)?))
+    let file = settings_file(app)?;
+    let mut s = session::load_settings(&file);
+    if s.station.is_empty() {
+        // first run on this laptop: give it its own code and remember it
+        s.station = session::generate_station();
+        session::save_settings(&file, &s)?;
+    }
+    Ok(s)
 }
 
 fn data_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
@@ -42,7 +49,11 @@ fn get_settings(app: tauri::AppHandle) -> Result<Settings, String> {
 }
 
 #[tauri::command]
-fn set_settings(app: tauri::AppHandle, new: Settings) -> Result<Settings, String> {
+fn set_settings(app: tauri::AppHandle, mut new: Settings) -> Result<Settings, String> {
+    new.station = session::clean_station(&new.station);
+    if new.station.is_empty() {
+        return Err("BAD_STATION: the laptop code needs 1-4 letters or digits".into());
+    }
     if !(new.rounds == 1 || new.rounds == 3) {
         return Err("rounds must be 1 or 3".into());
     }
@@ -58,7 +69,8 @@ async fn list_scanners() -> Result<Vec<String>, String> {
 
 #[tauri::command]
 fn new_session_id(app: tauri::AppHandle) -> Result<String, String> {
-    Ok(session::next_pid(&data_dir(&app)?))
+    let s = settings(&app)?;
+    Ok(session::next_pid(&PathBuf::from(&s.data_dir), &s.station))
 }
 
 #[derive(Serialize)]

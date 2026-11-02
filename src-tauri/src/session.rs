@@ -15,6 +15,9 @@ pub struct Settings {
     pub rounds: u8,
     /// Exact WIA device name, or None = pick the LiDE 300 driverless route automatically.
     pub scanner: Option<String>,
+    /// Short code that makes patient IDs unique per laptop: SFP-<station>-0001.
+    #[serde(default)]
+    pub station: String,
 }
 
 impl Default for Settings {
@@ -25,7 +28,7 @@ impl Default for Settings {
             let home = std::env::var("USERPROFILE").unwrap_or_else(|_| "C:\\".into());
             format!("{home}\\Documents\\SmartFoot_Data")
         };
-        Settings { data_dir, rounds: 3, scanner: None }
+        Settings { data_dir, rounds: 3, scanner: None, station: String::new() }
     }
 }
 
@@ -88,17 +91,31 @@ pub fn clean_pid(raw: &str) -> Result<String, String> {
     if p.is_empty() { Err("EMPTY_ID: patient ID is empty".into()) } else { Ok(p) }
 }
 
-/// Next free `SFP-0001`-style ID in the data folder.
-pub fn next_pid(data_dir: &Path) -> String {
+/// Keep a station code to 1-4 upper-case letters or digits.
+pub fn clean_station(raw: &str) -> String {
+    raw.chars().filter(|c| c.is_ascii_alphanumeric()).map(|c| c.to_ascii_uppercase()).take(4).collect()
+}
+
+/// A random-looking 3-character code (no look-alike characters) for a laptop that has none yet.
+pub fn generate_station() -> String {
+    const A: &[u8] = b"ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+    let n = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos() as u64).unwrap_or(1) ^ (std::process::id() as u64).wrapping_mul(7919);
+    let mut x = n.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+    (0..3).map(|_| { x = x.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407); A[((x >> 33) as usize) % A.len()] as char }).collect()
+}
+
+/// Next free ID in the data folder: `SFP-<station>-0001`, or `SFP-0001` when no station code is set.
+pub fn next_pid(data_dir: &Path, station: &str) -> String {
+    let prefix = if station.is_empty() { "SFP-".to_string() } else { format!("SFP-{station}-") };
     let mut max = 0u32;
     if let Ok(rd) = std::fs::read_dir(data_dir) {
         for e in rd.flatten() {
-            if let Some(n) = e.file_name().to_string_lossy().strip_prefix("SFP-").and_then(|r| r.parse::<u32>().ok()) {
+            if let Some(n) = e.file_name().to_string_lossy().strip_prefix(prefix.as_str()).and_then(|r| r.parse::<u32>().ok()) {
                 max = max.max(n);
             }
         }
     }
-    format!("SFP-{:04}", max + 1)
+    format!("{prefix}{:04}", max + 1)
 }
 
 pub fn session_dir(data_dir: &Path, pid: &str) -> Result<PathBuf, String> {
@@ -306,9 +323,17 @@ mod tests {
     #[test]
     fn ids_count_up_and_reject_duplicates() {
         let d = tmp("ids");
-        assert_eq!(next_pid(&d), "SFP-0001");
+        assert_eq!(next_pid(&d, ""), "SFP-0001");
         create_session(&d, "SFP-0001", "RF", Some(40), "f", "", 3, "x").unwrap();
-        assert_eq!(next_pid(&d), "SFP-0002");
+        assert_eq!(next_pid(&d, ""), "SFP-0002");
+        // another laptop's folders never count toward this laptop's numbers
+        create_session(&d, "SFP-K3F-0007", "RF", None, "f", "", 3, "x").unwrap();
+        assert_eq!(next_pid(&d, "K3F"), "SFP-K3F-0008");
+        assert_eq!(next_pid(&d, "Q9"), "SFP-Q9-0001");
+        assert_eq!(next_pid(&d, ""), "SFP-0002");
+        assert_eq!(clean_station(" k3-f!x9z "), "K3FX");
+        let g = generate_station();
+        assert!(g.len() == 3 && g == clean_station(&g));
         assert!(create_session(&d, "SFP-0001", "RF", None, "m", "", 3, "x").unwrap_err().starts_with("ID_USED"));
         assert_eq!(clean_pid(" SFP 0003/../ ").unwrap(), "SFP0003");
     }

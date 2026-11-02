@@ -19,14 +19,14 @@ const T = {
     set: "Pengaturan tim", setSub: "Hanya untuk tim peneliti. Perawat tidak perlu membuka halaman ini.",
     teamOnly: "Area tim · tidak ditampilkan di alur perawat",
     rnd: "Jumlah putaran bawaan", r1: "1 putaran", r3: "3 putaran", rndNote: "Tercatat di setiap file sesi.",
-    dataf: "Folder data", save: "Simpan", saved2: "Tersimpan ✓",
+    dataf: "Folder data", save: "Simpan", saved2: "Tersimpan ✓", station: "Kode laptop", stationNote: "Awalan ID pasien, unik per laptop (1–4 huruf/angka). Jangan sama dengan laptop lain.",
     scanner: "Pemindai", auto: "Otomatis (LiDE 300)", refresh: "Segarkan daftar",
     cal: "Kalibrasi skala", calNote: "Alat kalibrasi belum dibuat. Sementara semua sesi dicatat tanpa kalibrasi (anggap 300 dpi nominal).",
     back: "← Kembali", cancel: "Batalkan sesi", cancelSure: "Yakin? Tekan lagi untuk batal",
     e_NOT_FOUND: "Pemindai tidak ditemukan. Periksa kabel USB dan pastikan pemindai menyala.",
     e_LOCKED: "Gambar kosong: kunci transportasi pemindai masih tertutup. Buka kunci (LOCK) lalu ulangi.",
     e_BUSY: "Pemindai sedang sibuk. Tunggu beberapa detik lalu coba lagi.",
-    e_SCAN_FAILED: "Pemindaian gagal", e_ID_USED: "ID ini sudah dipakai. Gunakan ID lain.", e_EMPTY_ID: "ID pasien kosong.", e_OP: "Isi inisial operator.",
+    e_BAD_STATION: "Kode laptop harus 1–4 huruf atau angka.", e_SCAN_FAILED: "Pemindaian gagal", e_ID_USED: "ID ini sudah dipakai. Gunakan ID lain.", e_EMPTY_ID: "ID pasien kosong.", e_OP: "Isi inisial operator.",
     retry: "Coba lagi",
     resBtn: "Layar riset →", res: "Layar riset", resSub: "Angka ukuran dari pemindaian. Tanpa label datar/normal/tinggi.",
     resNone: "Belum ada sesi yang selesai.", resSess: "Sesi", resPts: "Seret dua titik putih: pusat tumit (bawah) dan ujung jari ke-2 (atas), lalu lepas. Angka dihitung ulang.",
@@ -52,14 +52,14 @@ const T = {
     set: "Team settings", setSub: "For the research team only. Nurses never need this page.",
     teamOnly: "Team area · not shown in the nurse flow",
     rnd: "Default number of rounds", r1: "1 round", r3: "3 rounds", rndNote: "Recorded in every session file.",
-    dataf: "Data folder", save: "Save", saved2: "Saved ✓",
+    dataf: "Data folder", save: "Save", saved2: "Saved ✓", station: "Laptop code", stationNote: "Prefix of patient IDs, unique per laptop (1–4 letters/digits). Never the same as another laptop.",
     scanner: "Scanner", auto: "Automatic (LiDE 300)", refresh: "Refresh list",
     cal: "Scale calibration", calNote: "The calibration tool is not built yet. Until then every session is recorded without calibration (nominal 300 dpi assumed).",
     back: "← Back", cancel: "Cancel session", cancelSure: "Sure? Press again to cancel",
     e_NOT_FOUND: "Scanner not found. Check the USB cable and that the scanner is switched on.",
     e_LOCKED: "Blank image: the scanner's transport lock is still closed. Open the LOCK switch and retake.",
     e_BUSY: "The scanner is busy. Wait a few seconds and try again.",
-    e_SCAN_FAILED: "Scan failed", e_ID_USED: "This ID is already used. Pick another ID.", e_EMPTY_ID: "The patient ID is empty.", e_OP: "Enter the operator initials.",
+    e_BAD_STATION: "The laptop code needs 1–4 letters or digits.", e_SCAN_FAILED: "Scan failed", e_ID_USED: "This ID is already used. Pick another ID.", e_EMPTY_ID: "The patient ID is empty.", e_OP: "Enter the operator initials.",
     retry: "Try again",
     resBtn: "Research screen →", res: "Research screen", resSub: "Size numbers from the scans. No flat/normal/high label.",
     resNone: "No finished session yet.", resSess: "Session", resPts: "Drag the two white points: heel centre (bottom) and 2nd-toe tip (top), then release. Numbers are recalculated.",
@@ -284,6 +284,7 @@ async function render() {
     m.innerHTML = `<div class="teambar">🔒 ${t("teamOnly")}</div><h1>${t("set")}</h1><p class="sub">${t("setSub")}</p>${errBox()}<div class="grid2">
       <div class="card"><label>${t("rnd")}</label><div class="seg"><button class="${c.rounds == 1 ? "on" : ""}" data-r="1">${t("r1")}</button><button class="${c.rounds == 3 ? "on" : ""}" data-r="3">${t("r3")}</button></div><p class="muted" style="margin:8px 0 22px">${t("rndNote")}</p>
         <label>${t("dataf")}</label><div class="row"><input id="s_dir" value="${esc(c.data_dir)}" style="flex:1"><button class="btn ghost" id="s_save" style="padding:12px 18px;font-size:16px">${t("save")}</button></div>
+        <label style="margin-top:22px">${t("station")}</label><div class="row"><input id="s_station" value="${esc(c.station)}" maxlength="4" style="flex:1;text-transform:uppercase"><button class="btn ghost" id="s_stsave" style="padding:12px 18px;font-size:16px">${t("save")}</button></div><p class="muted" style="margin:6px 0 0">${t("stationNote")}</p>
         <label style="margin-top:22px">${t("scanner")}</label><div class="row"><select id="s_dev" style="flex:1"><option value="">${t("auto")}</option>${st.scanners.map((d) => `<option ${c.scanner == d ? "selected" : ""}>${esc(d)}</option>`).join("")}</select><button class="btn ghost" id="s_ref" style="padding:12px 18px;font-size:16px">${t("refresh")}</button></div></div>
       <div class="card"><h2 style="font-size:20px;margin-bottom:6px">${t("cal")}</h2><p class="muted">${t("calNote")}</p></div></div>
       <div class="row" style="margin-top:22px"><button class="btn ghost" id="back">${t("back")}</button><button class="btn right" id="gores">${t("resBtn")}</button></div>`;
@@ -291,6 +292,7 @@ async function render() {
     const persist = async (patch) => { try { st.settings = await invoke("set_settings", { new: { ...st.settings, ...patch } }); st.error = ""; } catch (e) { st.error = e; } render(); };
     m.querySelectorAll("[data-r]").forEach((b) => (b.onclick = () => persist({ rounds: Number(b.dataset.r) })));
     $("#s_save").onclick = () => persist({ data_dir: $("#s_dir").value.trim() });
+    $("#s_stsave").onclick = () => { st.form.pid = ""; persist({ station: $("#s_station").value }); };
     $("#s_dev").onchange = (e) => persist({ scanner: e.target.value || null });
     $("#s_ref").onclick = async () => { try { st.scanners = await invoke("list_scanners"); } catch (e) { st.error = e; } render(); };
     $("#back").onclick = () => { st.screen = st.prev; st.error = ""; render(); };
