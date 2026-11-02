@@ -134,6 +134,11 @@ fn retake_scan(app: tauri::AppHandle, pid: String, side: String, round: u8) -> R
 }
 
 #[tauri::command]
+fn cancel_session(app: tauri::AppHandle, pid: String) -> Result<bool, String> {
+    session::cancel(&session::session_dir(&data_dir(&app)?, &pid)?)
+}
+
+#[tauri::command]
 fn finish_session(app: tauri::AppHandle, pid: String) -> Result<(), String> {
     session::complete(&session::session_dir(&data_dir(&app)?, &pid)?)
 }
@@ -151,7 +156,8 @@ pub fn run() {
             scan_foot,
             accept_scan,
             retake_scan,
-            finish_session
+            finish_session,
+            cancel_session
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -22,7 +22,7 @@ const T = {
     dataf: "Folder data", save: "Simpan", saved2: "Tersimpan ✓",
     scanner: "Pemindai", auto: "Otomatis (LiDE 300)", refresh: "Segarkan daftar",
     cal: "Kalibrasi skala", calNote: "Alat kalibrasi belum dibuat. Sementara semua sesi dicatat tanpa kalibrasi (anggap 300 dpi nominal).",
-    back: "← Kembali",
+    back: "← Kembali", cancel: "Batalkan sesi", cancelSure: "Yakin? Tekan lagi untuk batal",
     e_NOT_FOUND: "Pemindai tidak ditemukan. Periksa kabel USB dan pastikan pemindai menyala.",
     e_LOCKED: "Gambar kosong: kunci transportasi pemindai masih tertutup. Buka kunci (LOCK) lalu ulangi.",
     e_BUSY: "Pemindai sedang sibuk. Tunggu beberapa detik lalu coba lagi.",
@@ -48,7 +48,7 @@ const T = {
     dataf: "Data folder", save: "Save", saved2: "Saved ✓",
     scanner: "Scanner", auto: "Automatic (LiDE 300)", refresh: "Refresh list",
     cal: "Scale calibration", calNote: "The calibration tool is not built yet. Until then every session is recorded without calibration (nominal 300 dpi assumed).",
-    back: "← Back",
+    back: "← Back", cancel: "Cancel session", cancelSure: "Sure? Press again to cancel",
     e_NOT_FOUND: "Scanner not found. Check the USB cable and that the scanner is switched on.",
     e_LOCKED: "Blank image: the scanner's transport lock is still closed. Open the LOCK switch and retake.",
     e_BUSY: "The scanner is busy. Wait a few seconds and try again.",
@@ -83,6 +83,16 @@ const roundsBar = () => `<div class="rounds">${st.sess.seq.map((s, i) => `<span 
 
 const OUT = "M112 258c-16 8-38 6-44-12-6-20 4-44 2-70-2-26-20-52-12-86 7-30 34-44 56-36 24 8 30 40 26 70-3 24 6 46 8 70 2 22-8 56-36 64z";
 const guideFoot = (side) => `<svg viewBox="0 0 210 297"><g transform="${side == "left" ? "translate(210,0) scale(-1,1)" : ""}" opacity=".55"><path d="${OUT}" fill="#d7b79e"/><g fill="#d7b79e"><ellipse cx="114" cy="62" rx="13" ry="16"/><ellipse cx="135" cy="70" rx="8" ry="11"/><ellipse cx="148" cy="82" rx="7" ry="10"/><ellipse cx="156" cy="97" rx="6" ry="9"/><ellipse cx="160" cy="112" rx="5" ry="8"/></g></g></svg>`;
+
+const cancelBtn = () => `<div class="row" style="margin-top:22px"><button class="btn ghost" id="cancel" style="padding:10px 18px;font-size:15px">${t("cancel")}</button></div>`;
+function wireCancel() {
+  const b = $("#cancel"); if (!b) return; let armed = false;
+  b.onclick = async () => {
+    if (!armed) { armed = true; b.textContent = t("cancelSure"); b.classList.add("bad"); setTimeout(() => { armed = false; if (b.isConnected) { b.textContent = t("cancel"); b.classList.remove("bad"); } }, 4000); return; }
+    try { await invoke("cancel_session", { pid: st.sess.pid }); } catch (e) { st.error = e; render(); return; }
+    st.form = { pid: "", op: st.form.op, age: "", sex: "f", note: "" }; st.sess = null; st.scan = null; st.error = ""; st.screen = "start"; render();
+  };
+}
 
 async function render() {
   steps();
@@ -119,7 +129,8 @@ async function render() {
     const [side, r] = st.sess.seq[st.idx];
     m.innerHTML = `<h1>${t("scan")} · ${t(side)}</h1><p class="sub">${t("scanSub")}</p><div class="grid2"><div class="card"><div class="scanwin">${guideFoot(side)}</div></div>
       <div class="card"><span class="chip">${t("putaran")} ${r}/${st.sess.rounds}</span>${roundsBar()}${errBox()}<div id="sstate" style="margin:20px 0 14px;color:var(--mute)">${t("ready")}</div><div class="bar"><b id="sbar"></b></div>
-      <div class="row" style="margin-top:26px"><button class="btn" id="sgo">${st.error ? t("retry") : t("doScan")}</button></div></div></div>`;
+      <div class="row" style="margin-top:26px"><button class="btn" id="sgo">${st.error ? t("retry") : t("doScan")}</button></div>${cancelBtn()}</div></div>`;
+    wireCancel();
     $("#sgo").onclick = async () => {
       st.error = ""; $("#sgo").disabled = true; $("#sstate").textContent = t("scanning");
       let p = 0; const iv = setInterval(() => { p += (95 - p) * 0.04; $("#sbar").style.width = p + "%"; }, 400);
@@ -139,7 +150,8 @@ async function render() {
       <div class="card"><ul class="checks"><li><span class="dot ${noFoot ? "bad" : ""}"></span>${t("chkFound")}</li><li><span class="dot ${edge || noFoot ? "bad" : ""}"></span>${t("chkInside")}</li></ul>
       ${ok ? "" : `<div class="warn">${warnText}</div>`}
       <div class="row" style="margin-top:24px"><button class="btn ${ok ? "bad" : ""}" id="retake">↺ ${t("retake")}</button>
-      <button class="btn ${ok ? "ok" : "ghost"} right" id="accept">${ok ? "✓ " + t("accept") : t("acceptAnyway")}</button></div></div></div>`;
+      <button class="btn ${ok ? "ok" : "ghost"} right" id="accept">${ok ? "✓ " + t("accept") : t("acceptAnyway")}</button></div>${cancelBtn()}</div></div>`;
+    wireCancel();
     $("#retake").onclick = async () => {
       try { await invoke("retake_scan", { pid: st.sess.pid, side, round: r }); st.scan = null; st.screen = "scan"; st.error = ""; } catch (e) { st.error = e; }
       render();

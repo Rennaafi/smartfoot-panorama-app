@@ -69,6 +69,9 @@ pub struct SessionFile {
     pub calibration: Option<serde_json::Value>,
     pub scans: Vec<ScanEntry>,
     pub completed: bool,
+    /// Set when the operator cancelled a session that already had files worth keeping.
+    #[serde(default)]
+    pub cancelled: bool,
 }
 
 pub fn now_iso() -> String {
@@ -140,6 +143,7 @@ pub fn create_session(
         calibration: None,
         scans: vec![],
         completed: false,
+        cancelled: false,
     };
     write_session(&dir, &s)?;
     Ok(dir)
@@ -183,6 +187,20 @@ pub fn reject(dir: &Path, side: &str, round: u8) -> Result<(), String> {
     std::fs::rename(&from, dir.join("rejected").join(format!("{side}_{round}_{n}.png"))).map_err(|e| e.to_string())
 }
 
+/// Cancel a session. A session with no scans at all is removed (we created that empty folder);
+/// anything with scans is kept and marked cancelled. Returns true if the folder was removed.
+pub fn cancel(dir: &Path) -> Result<bool, String> {
+    let mut s = read_session(dir)?;
+    let has_files = |sub: &str| std::fs::read_dir(dir.join(sub)).map(|mut r| r.next().is_some()).unwrap_or(false);
+    if s.scans.is_empty() && !has_files("scans") && !has_files("rejected") && !has_files("_pending") {
+        std::fs::remove_dir_all(dir).map_err(|e| e.to_string())?;
+        return Ok(true);
+    }
+    s.cancelled = true;
+    write_session(dir, &s)?;
+    Ok(false)
+}
+
 pub fn complete(dir: &Path) -> Result<(), String> {
     let mut s = read_session(dir)?;
     s.completed = true;
@@ -208,6 +226,16 @@ mod tests {
         assert_eq!(next_pid(&d), "SFP-0002");
         assert!(create_session(&d, "SFP-0001", "RF", None, "m", "", 3, "x").unwrap_err().starts_with("ID_USED"));
         assert_eq!(clean_pid(" SFP 0003/../ ").unwrap(), "SFP0003");
+    }
+
+    #[test]
+    fn cancel_removes_empty_keeps_scanned() {
+        let d = tmp("cancel");
+        let a = create_session(&d, "SFP-0001", "RF", None, "f", "", 3, "x").unwrap();
+        assert!(cancel(&a).unwrap() && !a.exists());
+        let b = create_session(&d, "SFP-0002", "RF", None, "f", "", 3, "x").unwrap();
+        std::fs::write(b.join("_pending/right_1.png"), b"a").unwrap();
+        assert!(!cancel(&b).unwrap() && read_session(&b).unwrap().cancelled);
     }
 
     #[test]
