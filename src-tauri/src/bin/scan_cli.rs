@@ -1,7 +1,7 @@
 //! Hardware test tool: `cargo run --bin scan_cli -- list` or
 //! `cargo run --bin scan_cli -- scan "Canon LiDE 300 HTTP" 300 out.png`
 
-use smartfoot_app_lib::scanner;
+use smartfoot_app_lib::{analyze, scanner};
 use std::path::Path;
 
 fn main() {
@@ -19,6 +19,13 @@ fn main() {
                 Err(e) => eprintln!("error: {e}"),
             }
         }
-        _ => eprintln!("usage: scan_cli list | scan <device> <dpi> <out.png>"),
+        Some("analyze") if a.len() == 3 => match analyze::analyze(Path::new(&a[1])) {
+            Ok(r) => {
+                std::fs::write(&a[2], &r.preview_png).expect("write preview");
+                println!("found={} touches_edge={} clear={} area={:.1}% bbox={:?} -> {}", r.found, r.touches_edge, r.clear, r.area_frac * 100.0, r.bbox, a[2]);
+            }
+            Err(e) => eprintln!("error: {e}"),
+        },
+        _ => eprintln!("usage: scan_cli list | scan <device> <dpi> <out.png> | analyze <scan.png> <preview.png>"),
     }
 }

@@ -1,39 +1,93 @@
-<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <link rel="stylesheet" href="styles.css" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Tauri App</title>
-    <script type="module" src="/main.js" defer></script>
-  </head>
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SmartFoot</title>
+<style>
+/* ---------- shared ---------- */
+*{box-sizing:border-box;margin:0}
+:root{--blue:#1f5fbf;--blue2:#e8f0fb;--ink:#14213d;--mute:#6b7a90;--line:#d8e0ec;--ok:#1f9d6b;--warn:#d98a00;--bad:#c93b3b;--bg:#f5f8fc;--card:#fff;--r:14px;font-family:"Segoe UI",system-ui,sans-serif}
+body{background:var(--bg);color:var(--ink);min-height:100vh}
+button{font:inherit;cursor:pointer;border:0}
+.hidden{display:none!important}
+.app{min-height:100vh;display:grid}
+.steps{display:flex;gap:6px}
+.step{display:flex;align-items:center;gap:10px;color:var(--mute);font-weight:600}
+.step i{font-style:normal;width:30px;height:30px;border-radius:50%;display:grid;place-items:center;border:2px solid var(--line);background:#fff;font-size:14px}
+.step.on{color:var(--blue)} .step.on i{background:var(--blue);border-color:var(--blue);color:#fff}
+.step.done{color:var(--ok)} .step.done i{background:var(--ok);border-color:var(--ok);color:#fff}
+main{padding:36px 44px;max-width:1100px;width:100%}
+h1{font-size:30px;margin-bottom:6px} .sub{color:var(--mute);margin-bottom:26px;font-size:17px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:24px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+label{display:block;font-weight:600;margin-bottom:6px;font-size:15px}
+input,select,textarea{width:100%;font:inherit;padding:13px 14px;border:1.5px solid var(--line);border-radius:10px;background:#fff;color:var(--ink)}
+input:focus,select:focus,textarea:focus{outline:3px solid #1f5fbf33;border-color:var(--blue)}
+.field{margin-bottom:18px}
+.seg{display:flex;gap:8px}.seg button{flex:1;padding:13px;border-radius:10px;background:#fff;border:1.5px solid var(--line);font-weight:600}
+.seg button.on{background:var(--blue2);border-color:var(--blue);color:var(--blue)}
+.btn{padding:16px 30px;border-radius:12px;font-weight:700;font-size:18px;background:var(--blue);color:#fff;box-shadow:0 2px 0 #144a96}
+.btn:hover{filter:brightness(1.08)}.btn.ghost{background:#fff;color:var(--ink);border:1.5px solid var(--line);box-shadow:none}
+.btn.ok{background:var(--ok);box-shadow:0 2px 0 #167a52}.btn.bad{background:#fff;color:var(--bad);border:1.5px solid var(--bad);box-shadow:none}
+.row{display:flex;gap:14px;align-items:center;flex-wrap:wrap}.right{margin-left:auto}
+.chip{display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:999px;font-size:14px;font-weight:600;background:var(--blue2);color:var(--blue)}
+.chip.ok{background:#e1f5ec;color:var(--ok)}.chip.warn{background:#fff1d6;color:#9a6200}
+.scanwin{aspect-ratio:210/297;max-height:480px;background:#f0f3f8;border:2px dashed var(--line);border-radius:12px;display:grid;place-items:center;position:relative;overflow:hidden}
+.scanwin svg{width:100%;height:100%}
+.bar{height:10px;border-radius:99px;background:var(--line);overflow:hidden}.bar b{display:block;height:100%;width:0;background:var(--blue);transition:width .2s}
+.checks{list-style:none;padding:0}.checks li{display:flex;gap:10px;padding:10px 0;border-bottom:1px solid var(--line);align-items:center}
+.dot{width:12px;height:12px;border-radius:50%;background:var(--ok)}.dot.w{background:var(--warn)}
+.rounds{display:flex;gap:8px;margin:14px 0}
+.rounds span{flex:1;text-align:center;padding:10px 4px;border-radius:10px;background:#fff;border:1.5px solid var(--line);font-size:14px;font-weight:600;color:var(--mute)}
+.rounds span.d{background:#e1f5ec;border-color:var(--ok);color:var(--ok)}.rounds span.c{background:var(--blue2);border-color:var(--blue);color:var(--blue)}
+.big{font-size:56px;font-weight:800;letter-spacing:-1px}
+.lang{font-size:13px;background:#fff;border:1px solid var(--line);padding:5px 10px;border-radius:99px}
+.brand{font-weight:800;font-size:20px;letter-spacing:-.3px}.brand span{color:var(--blue)}
 
-  <body>
-    <main class="container">
-      <h1>Welcome to Tauri</h1>
 
-      <div class="row">
-        <a href="https://tauri.app" target="_blank">
-          <img src="/assets/tauri.svg" class="logo tauri" alt="Tauri logo" />
-        </a>
-        <a
-          href="https://developer.mozilla.org/en-US/docs/Web/JavaScript"
-          target="_blank"
-        >
-          <img
-            src="/assets/javascript.svg"
-            class="logo vanilla"
-            alt="JavaScript logo"
-          />
-        </a>
-      </div>
-      <p>Click on the Tauri logo to learn more about the framework</p>
+/* ---------- theme B: top bar, big touch ---------- */
+[data-theme=B]{--r:22px;--bg:#eef3fb}
+[data-theme=B] .app{grid-template-rows:auto 1fr}
+[data-theme=B] aside{display:flex;align-items:center;gap:30px;padding:16px 36px;background:var(--blue);color:#fff}
+[data-theme=B] aside .brand span{color:#bcd6ff}
+[data-theme=B] .steps{flex:1;justify-content:center;gap:26px}
+[data-theme=B] .step{color:#b9d0f5}[data-theme=B] .step i{background:transparent;border-color:#8fb3ec;color:#d8e6ff}
+[data-theme=B] .step.on{color:#fff}[data-theme=B] .step.on i{background:#fff;color:var(--blue);border-color:#fff}
+[data-theme=B] .step.done{color:#fff}[data-theme=B] .step.done i{background:#3ec58d;border-color:#3ec58d;color:#fff}
+[data-theme=B] main{max-width:1200px;margin:0 auto}
+[data-theme=B] h1{font-size:38px}[data-theme=B] .btn{padding:22px 44px;font-size:22px;border-radius:18px}
+[data-theme=B] input,[data-theme=B] select,[data-theme=B] .seg button{padding:18px;font-size:19px}
+[data-theme=B] .card{box-shadow:0 8px 30px #1f5fbf14;border:0}
+[data-theme=B] .lang{background:#ffffff22;border:0;color:#fff}
 
-      <form class="row" id="greet-form">
-        <input id="greet-input" placeholder="Enter a name..." />
-        <button type="submit">Greet</button>
-      </form>
-      <p id="greet-msg"></p>
-    </main>
-  </body>
+.theme-name{font-size:12px;color:var(--mute);margin-bottom:10px;text-transform:uppercase;letter-spacing:1px}
+</style>
+</head>
+<body data-theme="B">
+<div class="app">
+  <aside>
+    <div class="brand">Smart<span>Foot</span></div>
+    <div class="steps" id="steps"></div>
+    <div style="margin-top:auto" class="row"><button class="lang" id="lang">ID | EN</button></div>
+  </aside>
+  <main id="main"></main>
+</div>
+<style>
+table{width:100%;border-collapse:collapse;font-size:16px}th,td{padding:11px 10px;border-bottom:1px solid var(--line);text-align:right}th:first-child,td:first-child{text-align:left}th{color:var(--mute);font-weight:600;font-size:13px;text-transform:uppercase;letter-spacing:.5px}
+.kv{display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--line)}.kv span:first-child{color:var(--mute)}
+.gear{position:fixed;left:14px;bottom:14px}
+.teambar{background:#fff7e0;border:1px solid #f0d58a;color:#7a5a00;padding:8px 14px;border-radius:10px;font-size:14px;margin-bottom:18px;font-weight:600}
+</style>
+<style>
+.err{background:#fdecec;border:1px solid #f0b4b4;color:#8f2a2a;padding:14px 16px;border-radius:12px;margin:16px 0;font-weight:600;line-height:1.4}
+.warn{background:#fff1d6;border:1px solid #f0d58a;color:#7a5a00;padding:14px 16px;border-radius:12px;margin:14px 0;font-weight:600;line-height:1.4}
+.scanwin img{width:100%;height:100%;object-fit:contain}
+select{appearance:auto}
+.btn[disabled]{opacity:.45;pointer-events:none}
+.dot.bad{background:var(--bad)}
+.muted{color:var(--mute);font-size:14px}
+</style>
+<script src="app.js"></script>
+</body>
 </html>

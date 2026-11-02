@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "smartfoot-app",
+  "productName": "SmartFoot",
   "version": "0.1.0",
   "identifier": "id.ac.ui.smartfoot",
   "build": {
@@ -10,9 +10,11 @@
     "withGlobalTauri": true,
     "windows": [
       {
-        "title": "smartfoot-app",
-        "width": 800,
-        "height": 600
+        "title": "SmartFoot",
+        "width": 1280,
+        "height": 820,
+        "minWidth": 1000,
+        "minHeight": 700
       }
     ],
     "security": {
