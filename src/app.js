@@ -14,6 +14,14 @@ const T = {
     chkFound: "Kaki terdeteksi", chkInside: "Kaki penuh di dalam area",
     wNoFoot: "Kaki tidak terdeteksi. Pastikan kaki menempel di kaca, lalu ulangi.",
     wEdge: "Kaki menyentuh tepi gambar. Geser kaki menjauhi tepi, lalu ulangi.",
+    wOdd: "Bentuknya tidak seperti kaki (terlalu kecil, besar, atau memanjang). Pastikan yang dipindai adalah kaki.",
+    wTwo: "Ada benda kedua di kaca. Hanya satu yang diberi garis. Singkirkan benda lain, lalu ulangi.",
+    e_BAD_IMAGE: "Hasil pemindaian rusak atau terlalu kecil. Ulangi pemindaian.",
+    dmg: "Ada sesi yang rusak atau tidak lengkap", dmgHint: "Jangan dihapus. Beri tahu tim.",
+    e_BAD_ID: "ID pasien harus diawali huruf atau angka, maksimal 32 karakter, dan bukan nama khusus Windows (CON, NUL, COM1...).",
+    e_BAD_OP: "Inisial operator harus diawali huruf atau angka, maksimal 8 karakter.", e_EMPTY_OP: "Isi inisial operator.",
+    e_BAD_AGE: "Usia harus bilangan bulat 0–120.", e_BAD_SEX: "Pilih jenis kelamin.", e_BAD_DIR: "Folder harus berupa alamat lengkap, misalnya D:\\SmartFoot_Data.", e_BAD_ROUNDS: "Jumlah putaran harus 1 atau 3.",
+    e_TIMEOUT: "Scanner tidak merespons. Cabut dan colok kembali kabel USB, lalu ulangi.",
     accept: "Terima", acceptAnyway: "Tetap terima", retake: "Ulangi", saving: "Menyimpan…",
     done: "Sesi selesai", doneSub: "Semua pemindaian tersimpan.", saved: "Tersimpan di", scans: "pemindaian", newS: "Sesi baru",
     set: "Pengaturan", setSub: "Hanya untuk tim peneliti. Perawat tidak perlu membuka halaman ini.",
@@ -60,6 +68,14 @@ const T = {
     chkFound: "Foot detected", chkInside: "Whole foot inside the area",
     wNoFoot: "No foot detected. Make sure the foot rests on the glass, then retake.",
     wEdge: "The foot touches the image edge. Move it away from the edge, then retake.",
+    wOdd: "The shape does not look like a foot (too small, too large or too elongated). Make sure a foot was scanned.",
+    wTwo: "There is a second object on the glass. Only one is outlined. Remove the other object, then retake.",
+    e_BAD_IMAGE: "The scan is damaged or too small. Retake the scan.",
+    dmg: "Some sessions are damaged or incomplete", dmgHint: "Do not delete them. Tell the team.",
+    e_BAD_ID: "The patient ID must start with a letter or digit, be at most 32 characters and not be a reserved Windows name (CON, NUL, COM1...).",
+    e_BAD_OP: "The operator initials must start with a letter or digit and be at most 8 characters.", e_EMPTY_OP: "Enter the operator initials.",
+    e_BAD_AGE: "The age must be a whole number from 0 to 120.", e_BAD_SEX: "Choose the sex.", e_BAD_DIR: "The folder must be a full path, for example D:\\SmartFoot_Data.", e_BAD_ROUNDS: "Rounds must be 1 or 3.",
+    e_TIMEOUT: "The scanner is not answering. Unplug and replug the USB cable, then try again.",
     accept: "Accept", acceptAnyway: "Accept anyway", retake: "Retake", saving: "Saving…",
     done: "Session complete", doneSub: "All scans are saved.", saved: "Saved to", scans: "scans", newS: "New session",
     set: "Settings", setSub: "For the research team only. Nurses never need this page.",
@@ -186,7 +202,7 @@ async function runScannerTest() {
 async function refreshBk() { try { bk = await invoke("backup_status"); } catch { bk = null; } render(); }
 function noteScanError(e) { if (String(e).startsWith("LOCKED")) { sc.lock = true; paintChip(); } }
 
-const st = { screen: "start", prev: "start", form: { pid: "", op: "", age: "", sex: "f", note: "" }, sess: null, idx: 0, scan: null, error: "", busy: false, settings: null, scanners: [], unfinished: undefined };
+const st = { screen: "start", prev: "start", form: { pid: "", op: "", age: "", sex: "f", note: "" }, sess: null, idx: 0, scan: null, error: "", busy: false, settings: null, scanners: [], unfinished: undefined, damaged: [] };
 const STEP = { start: 0, scan: 1, review: 2, done: 3 };
 
 function errText(raw) {
@@ -315,12 +331,16 @@ async function render() {
 
   if (s === "start") {
     if (!st.form.pid) { try { st.form.pid = await invoke("new_session_id"); } catch (e) { st.error = e; } }
-    if (st.unfinished === undefined) { try { st.unfinished = await invoke("find_unfinished"); } catch { st.unfinished = null; } }
+    if (st.unfinished === undefined) {
+      try { st.unfinished = await invoke("find_unfinished"); } catch { st.unfinished = null; }
+      try { st.damaged = await invoke("damaged_sessions"); } catch { st.damaged = []; }
+    }
+    const dmg = st.damaged?.length ? `<div class="warn">${t("dmg")}: <b>${st.damaged.map(esc).join(", ")}</b>. ${t("dmgHint")}</div>` : "";
     const f = st.form, u = st.unfinished;
     const banner = u ? `<div class="card" style="margin-bottom:20px;border:2px solid var(--warn)"><div class="row"><div><div style="font-size:20px;font-weight:800">${t("unf")}</div>
         <div class="muted" style="margin:4px 0 8px">${t("unfSub")}</div><div><b>${esc(u.pid)}</b> · ${u.done} ${t("unfOf")} ${u.total} ${t("unfScans")} · ${t("unfBy")} ${esc(u.operator)}</div></div>
         <div class="row right"><button class="btn bad" id="unf_cancel" style="padding:14px 22px;font-size:17px">${t("cancel")}</button><button class="btn" id="unf_go" style="padding:14px 26px;font-size:18px">${t("resume")} →</button></div></div></div>` : "";
-    m.innerHTML = `<h1>${t("start")}</h1><p class="sub">${t("startSub")}</p><div id="scgate"></div>${banner}${errBox()}<div class="card"><div class="grid2">
+    m.innerHTML = `<h1>${t("start")}</h1><p class="sub">${t("startSub")}</p><div id="scgate"></div>${dmg}${banner}${errBox()}<div class="card"><div class="grid2">
       <div class="field"><label>${t("pid")}</label><input id="f_pid" value="${esc(f.pid)}"></div>
       <div class="field"><label>${t("op")} <span class="muted">(${t("opHint")})</span></label><input id="f_op" value="${esc(f.op)}" placeholder="RF" maxlength="4"></div>
       <div class="field"><label>${t("age")}</label><input id="f_age" type="number" min="0" max="120" value="${esc(f.age)}" placeholder="45"></div>
@@ -353,9 +373,11 @@ async function render() {
     $("#go").onclick = async () => {
       keep(); st.error = "";
       if (!f.op.trim()) { m.querySelector("h1").insertAdjacentHTML("afterend", `<div class="err">${t("e_OP")}</div>`); return; }
+      const ageNum = f.age === "" ? null : Number(f.age);
+      if (ageNum !== null && (!Number.isInteger(ageNum) || ageNum < 0 || ageNum > 120)) { m.querySelector("h1").insertAdjacentHTML("afterend", `<div class="err">${t("e_BAD_AGE")}</div>`); return; }
       st.busy = true; render();
       try {
-        const info = await invoke("start_session", { pid: f.pid, operator: f.op, age: f.age === "" ? null : Number(f.age), sex: f.sex, note: f.note });
+        const info = await invoke("start_session", { pid: f.pid, operator: f.op, age: ageNum, sex: f.sex, note: f.note });
         st.sess = { ...info, seq: seqOf(info.rounds) };
         st.idx = 0; st.scan = null; st.screen = "scan"; st.unfinished = undefined;
         sc.lock = false; if (sc.test && !sc.test.ok) sc.test = null;
@@ -386,7 +408,7 @@ async function render() {
   if (s === "review") {
     const [side, r] = st.sess.seq[st.idx], sc = st.scan, w = sc.warnings;
     const noFoot = w.includes("NO_FOOT"), edge = w.includes("EDGE"), ok = !w.length;
-    const warnText = [noFoot ? t("wNoFoot") : "", edge ? t("wEdge") : ""].filter(Boolean).join(" ");
+    const warnText = [noFoot ? t("wNoFoot") : "", edge ? t("wEdge") : "", w.includes("ODD_SHAPE") ? t("wOdd") : "", w.includes("TWO_OBJECTS") ? t("wTwo") : ""].filter(Boolean).join(" ");
     m.innerHTML = `<h1>${t("review")} · ${t(side)} ${r}/${st.sess.rounds}</h1><p class="sub">${t("reviewSub")}</p>${errBox()}<div class="grid2"><div class="card"><div class="scanwin" style="background:#10151f"><img src="${sc.preview}" alt=""></div></div>
       <div class="card"><ul class="checks"><li><span class="dot ${noFoot ? "bad" : ""}"></span>${t("chkFound")}</li><li><span class="dot ${edge || noFoot ? "bad" : ""}"></span>${t("chkInside")}</li></ul>
       ${ok ? "" : `<div class="warn">${warnText}</div>`}

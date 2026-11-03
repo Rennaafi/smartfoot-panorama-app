@@ -194,6 +194,43 @@ mod tests {
     }
 
     #[test]
+    fn backup_problems_fail_cleanly_and_never_touch_the_main_data() {
+        let root = tmp("problems");
+        let (data, bk) = (root.join("data"), root.join("bk"));
+        let s = data.join("SFP-0001");
+        std::fs::create_dir_all(s.join("scans")).unwrap();
+        std::fs::write(s.join("session.json"), b"{}").unwrap();
+        std::fs::write(s.join("scans/right_1.png"), b"scan").unwrap();
+
+        // backup "folder" is actually a file
+        let file = root.join("iam_a_file");
+        std::fs::write(&file, b"x").unwrap();
+        assert!(sync_session(&data, &s, &file).unwrap_err().starts_with("BACKUP_FAILED"));
+        // backup root under a file: cannot be created
+        assert!(sync_all(&data, &file.join("sub")).is_err());
+        // a drive that does not exist (USB unplugged)
+        let gone = std::path::PathBuf::from("Q:\\no_such_drive\\SmartFoot_Backup");
+        if !Path::new("Q:\\").exists() {
+            assert!(sync_session(&data, &s, &gone).is_err());
+        }
+        // a blocker inside the backup: a FILE where the session folder should go
+        std::fs::create_dir_all(&bk).unwrap();
+        std::fs::write(bk.join("SFP-0001"), b"in the way").unwrap();
+        assert!(sync_session(&data, &s, &bk).is_err());
+        // a session folder that vanished: nothing to copy, not an error
+        assert_eq!(sync_session(&data, &data.join("SFP-9999"), &root.join("bk2")).unwrap(), 0);
+        // after every failure the main data is exactly as it was
+        assert_eq!(std::fs::read(s.join("scans/right_1.png")).unwrap(), b"scan");
+        assert_eq!(std::fs::read(s.join("session.json")).unwrap(), b"{}");
+        // a leftover half-copied file from a crash is overwritten, never mistaken for a good copy
+        std::fs::remove_file(bk.join("SFP-0001")).unwrap();
+        std::fs::create_dir_all(bk.join("SFP-0001/scans")).unwrap();
+        std::fs::write(bk.join("SFP-0001/scans/right_1.copying"), b"half").unwrap();
+        assert!(sync_session(&data, &s, &bk).is_ok());
+        assert_eq!(std::fs::read(bk.join("SFP-0001/scans/right_1.png")).unwrap(), b"scan");
+    }
+
+    #[test]
     fn status_reports_unreachable_folder() {
         let root = tmp("status");
         assert!(!status(None).enabled);

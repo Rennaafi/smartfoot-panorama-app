@@ -52,14 +52,8 @@ fn get_settings(app: tauri::AppHandle) -> Result<Settings, String> {
 }
 
 #[tauri::command]
-fn set_settings(app: tauri::AppHandle, mut new: Settings) -> Result<Settings, String> {
-    new.station = session::clean_station(&new.station);
-    if new.station.is_empty() {
-        return Err("BAD_STATION: the laptop code needs 1-4 letters or digits".into());
-    }
-    if !(new.rounds == 1 || new.rounds == 3) {
-        return Err("rounds must be 1 or 3".into());
-    }
+fn set_settings(app: tauri::AppHandle, new: Settings) -> Result<Settings, String> {
+    let mut new = session::validate_settings(new)?;
     std::fs::create_dir_all(&new.data_dir).map_err(|e| format!("cannot use data folder: {e}"))?;
     new.backup_dir = new.backup_dir.take().map(|b| b.trim().to_string()).filter(|b| !b.is_empty());
     if let Some(b) = &new.backup_dir {
@@ -130,6 +124,8 @@ struct StartInfo {
 async fn start_session(app: tauri::AppHandle, pid: String, operator: String, age: Option<u32>, sex: String, note: String) -> Result<StartInfo, String> {
     tauri::async_runtime::spawn_blocking(move || {
         let s = settings(&app)?;
+        // check the form before touching the scanner or the disk
+        let (pid, operator, note) = session::validate_start(&pid, &operator, age, &sex, &note)?;
         let dev = choose_device(&s)?; // fail early if the scanner is not there
         scanner::warm_if_cold(&dev, &std::env::temp_dir())?; // also catches a closed LOCK switch before the patient sits down
         let dir = session::create_session(&PathBuf::from(&s.data_dir), &pid, &operator, age, &sex, &note, s.rounds, &dev)?;
@@ -157,8 +153,15 @@ fn outcome_from(path: &std::path::Path, seconds: f64, width_px: u32, height_px: 
     if !a.found {
         warnings.push("NO_FOOT".to_string());
     }
-    if a.touches_edge {
+    // no foot means no edge question: "no foot" and "touches the edge" together only confuse
+    if a.touches_edge && a.found {
         warnings.push("EDGE".to_string());
+    }
+    if a.odd_shape {
+        warnings.push("ODD_SHAPE".to_string());
+    }
+    if a.extra_objects {
+        warnings.push("TWO_OBJECTS".to_string());
     }
     Ok(ScanOutcome {
         preview: format!("data:image/png;base64,{}", base64::engine::general_purpose::STANDARD.encode(&a.preview_png)),
@@ -166,7 +169,7 @@ fn outcome_from(path: &std::path::Path, seconds: f64, width_px: u32, height_px: 
         width_px,
         height_px,
         found: a.found,
-        touches_edge: a.touches_edge,
+        touches_edge: a.touches_edge && a.found,
         area_pct: a.area_frac * 100.0,
         warnings,
     })
@@ -194,6 +197,12 @@ struct Unfinished {
     operator: String,
     done: usize,
     total: usize,
+}
+
+/// Session folders that cannot be read; shown as a warning, never deleted.
+#[tauri::command]
+fn damaged_sessions(app: tauri::AppHandle) -> Result<Vec<String>, String> {
+    Ok(session::damaged_sessions(&data_dir(&app)?))
 }
 
 #[tauri::command]
@@ -371,6 +380,7 @@ pub fn run() {
             test_scanner,
             new_session_id,
             find_unfinished,
+            damaged_sessions,
             resume_session,
             start_session,
             scan_foot,

@@ -16,6 +16,12 @@ pub struct Analysis {
     pub limb_at_edge: bool,
     pub clear: bool,
     pub area_frac: f32,
+    /// The thing found is not foot-shaped (too small/large or too elongated/round: a ruler, a card,
+    /// a hand held sideways...). A warning only: the operator may still accept. Thresholds are
+    /// provisional until real feet have been scanned on the final casing.
+    pub odd_shape: bool,
+    /// A second large object lies on the glass (e.g. both feet): only the largest one is outlined.
+    pub extra_objects: bool,
     pub bbox: Option<[u32; 4]>, // x0,y0,x1,y1 in preview pixels
     pub preview_w: u32,
     pub preview_h: u32,
@@ -27,9 +33,20 @@ const LIMB_MAX_MM: f32 = 80.0;
 /// Pixels above this fraction of the Otsu threshold count as foot when connected to a strong pixel.
 const WEAK_FRAC: f32 = 0.55;
 const STRIP: u32 = 20; // rows used for the background estimate (preview pixels)
+/// Smallest scan (full-resolution pixels per side) worth analysing; anything smaller is a broken scan.
+pub const MIN_SCAN_PX: u32 = 160;
+
+pub fn too_small(w: u32, h: u32) -> Result<(), String> {
+    if w < MIN_SCAN_PX || h < MIN_SCAN_PX {
+        Err(format!("BAD_IMAGE: the scan is only {w}x{h} pixels, too small to be a real scan"))
+    } else {
+        Ok(())
+    }
+}
 
 pub fn analyze(path: &Path) -> Result<Analysis, String> {
     let full = image::open(path).map_err(|e| format!("cannot read scan: {e}"))?.to_rgb8();
+    too_small(full.width(), full.height())?;
     let img = image::imageops::resize(&full, full.width() / DOWN, full.height() / DOWN, FilterType::Triangle);
     Ok(analyze_image(&img))
 }
@@ -41,6 +58,8 @@ pub struct Seg {
     pub thr: u8,
     pub w: u32,
     pub h: u32,
+    /// Area of the objects dropped by "keep the largest blob", as a fraction of the kept one.
+    pub extra_frac: f32,
 }
 
 /// `down` = how many scan pixels one pixel of `img` covers; sizes below were tuned at 4.
@@ -121,15 +140,18 @@ pub fn segment(img: &RgbImage, down: u32) -> Seg {
     mask = morph(&mask, wu, hu, r2, true);
     mask = morph(&mask, wu, hu, r3, true);
     mask = morph(&mask, wu, hu, r3, false);
+    let before = mask.iter().filter(|&&m| m).count();
     mask = largest_blob(&mask, wu, hu);
+    let kept = mask.iter().filter(|&&m| m).count();
+    let extra_frac = if kept > 0 { before.saturating_sub(kept) as f32 / kept as f32 } else { 0.0 };
     // only small holes (< 2 cm^2) are filled; a big pocket between toes must stay open
     let max_hole_px = (200.0 / (down.max(1) as f32 * 25.4 / 300.0).powi(2)) as usize;
     mask = fill_holes(&mask, wu, hu, max_hole_px);
-    Seg { mask, score, thr, w, h }
+    Seg { mask, score, thr, w, h, extra_frac }
 }
 
 pub fn analyze_image(img: &RgbImage) -> Analysis {
-    let Seg { mask, score, thr, w, h } = segment(img, DOWN);
+    let Seg { mask, score, thr, w, h, extra_frac } = segment(img, DOWN);
     let (wu, hu) = (w as usize, h as usize);
 
     let count = mask.iter().filter(|&&m| m).count();
@@ -177,6 +199,28 @@ pub fn analyze_image(img: &RgbImage) -> Analysis {
     let (fm, bm) = (fs / fn_.max(1.0), bs / bn.max(1.0));
     let clear = found && fm >= 1.8 * thr as f64 && bm <= 0.6 * thr as f64;
 
+    // shape sanity: principal axes of the mask. A foot is about 2.2-3.2 times longer than wide (by
+    // spread) and 150-330 mm long; a ruler, card or speck is far outside that.
+    let (mut sx, mut sy, mut sxx, mut syy, mut sxy) = (0f64, 0f64, 0f64, 0f64, 0f64);
+    for y in 0..hu {
+        for x in 0..wu {
+            if mask[y * wu + x] {
+                let (xf, yf) = (x as f64, y as f64);
+                sx += xf; sy += yf; sxx += xf * xf; syy += yf * yf; sxy += xf * yf;
+            }
+        }
+    }
+    let n = (count as f64).max(1.0);
+    let (mx, my) = (sx / n, sy / n);
+    let (cxx, cyy, cxy) = (sxx / n - mx * mx, syy / n - my * my, sxy / n - mx * my);
+    let (tr, det) = (cxx + cyy, cxx * cyy - cxy * cxy);
+    let disc = ((tr * tr / 4.0) - det).max(0.0).sqrt();
+    let (l1, l2) = (tr / 2.0 + disc, (tr / 2.0 - disc).max(1e-9));
+    let major_mm = 4.0 * l1.sqrt() / px_per_mm as f64;
+    let elong = (l1 / l2).sqrt();
+    let odd_shape = found && (major_mm < 90.0 || major_mm > 420.0 || elong < 1.6 || elong > 5.0);
+    let extra_objects = found && extra_frac > 0.25;
+
     // 6. preview with the outline drawn in blue
     let mut prev = img.clone();
     for y in 1..hu - 1 {
@@ -201,6 +245,8 @@ pub fn analyze_image(img: &RgbImage) -> Analysis {
         limb_at_edge,
         clear,
         area_frac,
+        odd_shape,
+        extra_objects,
         bbox: if count > 0 { Some([x0, y0, x1, y1]) } else { None },
         preview_w: w,
         preview_h: h,

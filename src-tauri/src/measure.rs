@@ -229,6 +229,7 @@ pub fn measure_mask(mask: &[bool], w: usize, h: usize, scale: &Scale, down: f32,
 /// Measure a scan file. `pts` = hand-placed (heel centre, toe tip) in full-resolution pixels.
 pub fn measure_scan(path: &Path, scale: &Scale, pts: Option<(P, P)>) -> Result<Measurements, String> {
     let full = image::open(path).map_err(|e| format!("cannot read scan: {e}"))?.to_rgb8();
+    crate::analyze::too_small(full.width(), full.height())?;
     let img = image::imageops::resize(&full, full.width() / MEASURE_DOWN, full.height() / MEASURE_DOWN, FilterType::Triangle);
     let seg = crate::analyze::segment(&img, MEASURE_DOWN);
     measure_mask(&seg.mask, seg.w as usize, seg.h as usize, scale, MEASURE_DOWN as f32, pts)

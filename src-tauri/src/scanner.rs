@@ -6,7 +6,7 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 #[cfg(windows)]
 use std::os::windows::process::CommandExt;
@@ -23,19 +23,47 @@ pub struct ScanResult {
     pub height_px: u32,
 }
 
-fn powershell(script: &str) -> Result<String, String> {
+/// Run a PowerShell script and return its output. A hung scanner driver would otherwise freeze the
+/// app forever, so the process is killed after `limit` and `TIMEOUT:` is returned.
+fn powershell_with_limit(script: &str, limit: Duration) -> Result<String, String> {
+    use std::io::Read;
+    use std::process::Stdio;
     let mut cmd = Command::new("powershell.exe");
     cmd.args(["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", script]);
+    cmd.stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
     #[cfg(windows)]
     cmd.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
-    let out = cmd.output().map_err(|e| format!("cannot start PowerShell: {e}"))?;
-    let text = String::from_utf8_lossy(&out.stdout).trim().to_string();
-    if out.status.success() {
+    let mut child = cmd.spawn().map_err(|e| format!("cannot start PowerShell: {e}"))?;
+    // drain both pipes on their own threads so a chatty script can never block on a full pipe
+    let mut so = child.stdout.take().unwrap();
+    let mut se = child.stderr.take().unwrap();
+    let t_out = std::thread::spawn(move || { let mut b = Vec::new(); let _ = so.read_to_end(&mut b); b });
+    let t_err = std::thread::spawn(move || { let mut b = Vec::new(); let _ = se.read_to_end(&mut b); b });
+    let start = Instant::now();
+    let status = loop {
+        match child.try_wait() {
+            Ok(Some(st)) => break st,
+            Ok(None) if start.elapsed() >= limit => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err(format!("TIMEOUT: the scanner did not answer within {} s", limit.as_secs()));
+            }
+            Ok(None) => std::thread::sleep(Duration::from_millis(40)),
+            Err(e) => return Err(format!("PowerShell: {e}")),
+        }
+    };
+    let text = String::from_utf8_lossy(&t_out.join().unwrap_or_default()).trim().to_string();
+    if status.success() {
         Ok(text)
     } else {
-        let err = String::from_utf8_lossy(&out.stderr).trim().to_string();
+        let err = String::from_utf8_lossy(&t_err.join().unwrap_or_default()).trim().to_string();
         Err(if text.is_empty() { err } else { text })
     }
+}
+
+/// A scan: cold start plus the head returning is about 30 s, so 150 s only ever means "hung".
+fn powershell(script: &str) -> Result<String, String> {
+    powershell_with_limit(script, Duration::from_secs(150))
 }
 
 /// Single quotes doubled so a value can sit inside a PowerShell '...' string.
@@ -45,10 +73,11 @@ fn ps_quote(s: &str) -> String {
 
 /// Names of all WIA scanners Windows can see right now (e.g. "Canon LiDE 300 HTTP").
 pub fn list_scanners() -> Result<Vec<String>, String> {
-    let out = powershell(
+    let out = powershell_with_limit(
         "$dm = New-Object -ComObject WIA.DeviceManager; \
          for ($i = 1; $i -le $dm.DeviceInfos.Count; $i++) { \
            $dm.DeviceInfos.Item($i).Properties.Item('Description').Value }",
+        Duration::from_secs(20),
     )?;
     Ok(out.lines().map(|l| l.trim().to_string()).filter(|l| !l.is_empty()).collect())
 }
@@ -111,7 +140,7 @@ pub fn status(preferred: Option<&str>) -> Result<ScannerStatus, String> {
 }
 
 fn has_null_driver() -> bool {
-    powershell("Get-CimInstance Win32_PnPEntity -Filter \"Name like '%Null Driver%'\" | ForEach-Object { $_.Name }")
+    powershell_with_limit("Get-CimInstance Win32_PnPEntity -Filter \"Name like '%Null Driver%'\" | ForEach-Object { $_.Name }", Duration::from_secs(30))
         .map(|t| !t.trim().is_empty())
         .unwrap_or(false)
 }
@@ -212,7 +241,9 @@ fn check_image(path: &Path) -> Result<(u32, u32), String> {
 /// Turn raw PowerShell/WIA errors into short messages the UI can show.
 fn friendly(raw: &str) -> String {
     let r = raw.trim_start_matches("ERR|");
-    if r.contains("scanner not found") {
+    if r.starts_with("TIMEOUT") {
+        r.to_string()
+    } else if r.contains("scanner not found") {
         "NOT_FOUND: scanner not found. Check the USB cable and that the scanner is switched on.".into()
     } else if r.contains("driver threw an exception") {
         // measured 2026-11-03 on the LiDE 300 driverless route: LOCK closed -> this error,
@@ -222,5 +253,69 @@ fn friendly(raw: &str) -> String {
         "BUSY: the scanner is busy. Wait a few seconds and try again.".into()
     } else {
         format!("SCAN_FAILED: {r}")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn names(v: &[&str]) -> Vec<String> {
+        v.iter().map(|s| s.to_string()).collect()
+    }
+
+    #[test]
+    fn a_hung_scanner_driver_is_killed_instead_of_freezing_the_app() {
+        let t = Instant::now();
+        let e = powershell_with_limit("Start-Sleep -Seconds 30", Duration::from_secs(2)).unwrap_err();
+        assert!(e.starts_with("TIMEOUT"), "{e}");
+        assert!(t.elapsed() < Duration::from_secs(10), "took {:?}", t.elapsed());
+        assert_eq!(powershell_with_limit("'hello'", Duration::from_secs(20)).unwrap(), "hello");
+        // a script that prints a lot must not deadlock on a full pipe
+        let big = powershell_with_limit("1..20000 | ForEach-Object { 'line ' + $_ }", Duration::from_secs(30)).unwrap();
+        assert!(big.lines().count() >= 20000);
+        assert!(friendly("TIMEOUT: x").starts_with("TIMEOUT"));
+    }
+
+    #[test]
+    fn device_choice_with_odd_device_lists() {
+        // nothing connected
+        assert_eq!(pick(&[], None), None);
+        assert_eq!(pick(&[], Some("Canon LiDE 300 HTTP")), None);
+        // preferred device is gone (unplugged): fall back to what is there
+        let all = names(&["Canon IJ Scanner", "Canon LiDE 300 HTTP"]);
+        assert_eq!(pick(&all, Some("Old Scanner")).unwrap(), "Canon LiDE 300 HTTP");
+        // an explicit choice wins, even the Canon driver route
+        assert_eq!(pick(&all, Some("Canon IJ Scanner")).unwrap(), "Canon IJ Scanner");
+        // only the Canon driver route is visible (no driverless entry): it is the only device, use it
+        assert_eq!(pick(&names(&["Canon IJ Scanner"]), None).unwrap(), "Canon IJ Scanner");
+        // two unrelated scanners and no LiDE 300: refuse to guess
+        assert_eq!(pick(&names(&["HP Scanjet", "Epson V19"]), None), None);
+        // the LiDE 110 must never be picked for patients
+        assert_eq!(pick(&names(&["Canon LiDE 110 HTTP", "HP Scanjet"]), None), None);
+        assert_eq!(route_of("Canon LiDE 300 HTTP"), "driverless");
+        assert_eq!(route_of("Canon IJ Scanner"), "canon");
+        assert_eq!(route_of("HP Scanjet"), "other");
+    }
+
+    fn tmp_png(name: &str, img: &image::RgbImage) -> PathBuf {
+        let p = std::env::temp_dir().join(format!("sf_scan_{name}_{}.png", std::process::id()));
+        img.save(&p).unwrap();
+        p
+    }
+
+    #[test]
+    fn a_locked_scanner_blank_image_is_caught_and_a_real_one_is_not() {
+        // LOCK closed: the head never moves, every row is a copy of the first
+        let row: Vec<u8> = (0..300u32).flat_map(|x| { let g = (100 + (x * 7) % 40) as u8; [g, g, g] }).collect();
+        let locked = image::RgbImage::from_fn(300, 400, |x, _| image::Rgb([row[x as usize * 3], row[x as usize * 3 + 1], row[x as usize * 3 + 2]]));
+        let p = tmp_png("locked", &locked);
+        assert!(check_image(&p).unwrap_err().starts_with("LOCKED"));
+        // a real scan has sensor noise from row to row
+        let real = image::RgbImage::from_fn(300, 400, |x, y| { let g = (100 + (x * 7 + y * 13) % 40) as u8; image::Rgb([g, g, g]) });
+        let q = tmp_png("real", &real);
+        assert_eq!(check_image(&q).unwrap(), (300, 400));
+        let _ = std::fs::remove_file(p);
+        let _ = std::fs::remove_file(q);
     }
 }
