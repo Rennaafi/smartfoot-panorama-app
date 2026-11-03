@@ -118,6 +118,27 @@ struct ScanOutcome {
     warnings: Vec<String>,
 }
 
+fn outcome_from(path: &std::path::Path, seconds: f64, width_px: u32, height_px: u32) -> Result<ScanOutcome, String> {
+    let a = analyze::analyze(path)?;
+    let mut warnings = vec![];
+    if !a.found {
+        warnings.push("NO_FOOT".to_string());
+    }
+    if a.touches_edge {
+        warnings.push("EDGE".to_string());
+    }
+    Ok(ScanOutcome {
+        preview: format!("data:image/png;base64,{}", base64::engine::general_purpose::STANDARD.encode(&a.preview_png)),
+        seconds,
+        width_px,
+        height_px,
+        found: a.found,
+        touches_edge: a.touches_edge,
+        area_pct: a.area_frac * 100.0,
+        warnings,
+    })
+}
+
 #[tauri::command]
 async fn scan_foot(app: tauri::AppHandle, pid: String, side: String, round: u8) -> Result<ScanOutcome, String> {
     tauri::async_runtime::spawn_blocking(move || {
@@ -126,24 +147,66 @@ async fn scan_foot(app: tauri::AppHandle, pid: String, side: String, round: u8) 
         let dir = session::session_dir(&PathBuf::from(&s.data_dir), &pid)?;
         let out = dir.join("_pending").join(format!("{side}_{round}.png"));
         let r = scanner::scan(&dev, 300, &out)?;
-        let a = analyze::analyze(&out)?;
-        let mut warnings = vec![];
-        if !a.found {
-            warnings.push("NO_FOOT".to_string());
+        outcome_from(&out, r.seconds, r.width_px, r.height_px)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// A session left open (app closed or crashed mid-patient), if any.
+#[derive(Serialize)]
+struct Unfinished {
+    pid: String,
+    created: String,
+    operator: String,
+    done: usize,
+    total: usize,
+}
+
+#[tauri::command]
+fn find_unfinished(app: tauri::AppHandle) -> Result<Option<Unfinished>, String> {
+    Ok(session::find_unfinished(&data_dir(&app)?).map(|s| Unfinished { total: s.rounds as usize * 2, done: s.scans.len(), pid: s.pid, created: s.created, operator: s.operator }))
+}
+
+#[derive(Serialize)]
+struct ResumeInfo {
+    start: StartInfo,
+    /// index into the right/left x rounds sequence of the next scan to take
+    idx: usize,
+    /// a scan that was taken but not yet accepted or retaken when the app stopped, ready for review
+    pending: Option<ScanOutcome>,
+}
+
+/// Re-open an unfinished session. Scans already accepted stay as they are; a scan that was waiting
+/// for Accept/Retake comes back for review (its scan time is unknown, stored as 0). Any other
+/// leftover file in _pending is moved to rejected/, never deleted.
+#[tauri::command]
+async fn resume_session(app: tauri::AppHandle, pid: String) -> Result<ResumeInfo, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let dir = session::session_dir(&data_dir(&app)?, &pid)?;
+        let s = session::read_session(&dir)?;
+        if s.completed || s.cancelled {
+            return Err("NOT_RESUMABLE: this session is already finished or cancelled".to_string());
         }
-        if a.touches_edge {
-            warnings.push("EDGE".to_string());
+        let idx = session::next_index(&s);
+        let want = session::seq(s.rounds).get(idx).map(|(side, r)| format!("{side}_{r}.png"));
+        let mut pending = None;
+        if let Ok(rd) = std::fs::read_dir(dir.join("_pending")) {
+            for e in rd.flatten() {
+                let name = e.file_name().to_string_lossy().to_string();
+                let p = e.path();
+                if Some(&name) == want.as_ref() && pending.is_none() {
+                    if let Ok((w, h)) = image::image_dimensions(&p) {
+                        pending = outcome_from(&p, 0.0, w, h).ok();
+                    }
+                }
+                if pending.is_none() || Some(&name) != want.as_ref() {
+                    let stem = name.trim_end_matches(".png");
+                    let _ = std::fs::rename(&p, dir.join("rejected").join(format!("{stem}_resumed.png")));
+                }
+            }
         }
-        Ok(ScanOutcome {
-            preview: format!("data:image/png;base64,{}", base64::engine::general_purpose::STANDARD.encode(&a.preview_png)),
-            seconds: r.seconds,
-            width_px: r.width_px,
-            height_px: r.height_px,
-            found: a.found,
-            touches_edge: a.touches_edge,
-            area_pct: a.area_frac * 100.0,
-            warnings,
-        })
+        Ok(ResumeInfo { start: StartInfo { pid: s.pid.clone(), rounds: s.rounds, dir: dir.to_string_lossy().into(), scanner: s.scanner.clone() }, idx, pending })
     })
     .await
     .map_err(|e| e.to_string())?
@@ -261,6 +324,8 @@ pub fn run() {
             scanner_status,
             test_scanner,
             new_session_id,
+            find_unfinished,
+            resume_session,
             start_session,
             scan_foot,
             accept_scan,

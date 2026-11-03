@@ -41,6 +41,8 @@ const T = {
     scDriverless: "Driverless (disarankan)", scCanon: "Driver Canon", scOther: "Lainnya", scNo: "tidak ada", scYes: "ADA, cabut dan colok kembali",
     scTest: "Tes scanner", scTesting: "Menguji… (sampai ±25 detik)", scTestNote: "Memindai strip kecil tanpa kaki di kaca. Membuktikan scanner benar-benar bisa memindai dan kunci LOCK terbuka.",
     scLast: "Tes terakhir", scNever: "belum ada", scPass: "berhasil", scFail: "gagal",
+    unf: "Sesi belum selesai", unfSub: "Aplikasi tertutup di tengah sesi ini. Lanjutkan dari pemindaian berikutnya.", unfOf: "dari", unfScans: "pemindaian tersimpan", unfBy: "operator", resume: "Lanjutkan sesi", resuming: "Membuka…",
+    e_NOT_RESUMABLE: "Sesi ini sudah selesai atau dibatalkan.",
     kFL: "Panjang kaki", kFW: "Lebar kaki", kArea: "Luas kontak", kToeless: "Luas tanpa jari", kA: "Tumit (A)", kB: "Lengkung (B)", kC: "Depan (C)", kAI: "Arch index (AI)", kCSI: "Chippaux-Smirak (%)",
   },
   en: {
@@ -81,6 +83,8 @@ const T = {
     scDriverless: "Driverless (preferred)", scCanon: "Canon driver", scOther: "Other", scNo: "none", scYes: "PRESENT, unplug and replug",
     scTest: "Test scanner", scTesting: "Testing… (up to ~25 s)", scTestNote: "Scans a small strip with no foot on the glass. Proves the scanner can really scan and the LOCK switch is open.",
     scLast: "Last test", scNever: "none yet", scPass: "passed", scFail: "failed",
+    unf: "Unfinished session", unfSub: "The app closed in the middle of this session. Continue from the next scan.", unfOf: "of", unfScans: "scans saved", unfBy: "operator", resume: "Resume session", resuming: "Opening…",
+    e_NOT_RESUMABLE: "This session is already finished or cancelled.",
     kFL: "Foot length", kFW: "Foot width", kArea: "Contact area", kToeless: "Area without toes", kA: "Hindfoot (A)", kB: "Midfoot (B)", kC: "Forefoot (C)", kAI: "Arch index (AI)", kCSI: "Chippaux-Smirak (%)",
   },
 };
@@ -166,7 +170,7 @@ async function runScannerTest() {
 }
 function noteScanError(e) { if (String(e).startsWith("LOCKED")) { sc.lock = true; paintChip(); } }
 
-const st = { screen: "start", prev: "start", form: { pid: "", op: "", age: "", sex: "f", note: "" }, sess: null, idx: 0, scan: null, error: "", busy: false, settings: null, scanners: [] };
+const st = { screen: "start", prev: "start", form: { pid: "", op: "", age: "", sex: "f", note: "" }, sess: null, idx: 0, scan: null, error: "", busy: false, settings: null, scanners: [], unfinished: undefined };
 const STEP = { start: 0, scan: 1, review: 2, done: 3 };
 
 function errText(raw) {
@@ -295,8 +299,12 @@ async function render() {
 
   if (s === "start") {
     if (!st.form.pid) { try { st.form.pid = await invoke("new_session_id"); } catch (e) { st.error = e; } }
-    const f = st.form;
-    m.innerHTML = `<h1>${t("start")}</h1><p class="sub">${t("startSub")}</p><div id="scgate"></div>${errBox()}<div class="card"><div class="grid2">
+    if (st.unfinished === undefined) { try { st.unfinished = await invoke("find_unfinished"); } catch { st.unfinished = null; } }
+    const f = st.form, u = st.unfinished;
+    const banner = u ? `<div class="card" style="margin-bottom:20px;border:2px solid var(--warn)"><div class="row"><div><div style="font-size:20px;font-weight:800">${t("unf")}</div>
+        <div class="muted" style="margin:4px 0 8px">${t("unfSub")}</div><div><b>${esc(u.pid)}</b> · ${u.done} ${t("unfOf")} ${u.total} ${t("unfScans")} · ${t("unfBy")} ${esc(u.operator)}</div></div>
+        <div class="row right"><button class="btn bad" id="unf_cancel" style="padding:14px 22px;font-size:17px">${t("cancel")}</button><button class="btn" id="unf_go" style="padding:14px 26px;font-size:18px">${t("resume")} →</button></div></div></div>` : "";
+    m.innerHTML = `<h1>${t("start")}</h1><p class="sub">${t("startSub")}</p><div id="scgate"></div>${banner}${errBox()}<div class="card"><div class="grid2">
       <div class="field"><label>${t("pid")}</label><input id="f_pid" value="${esc(f.pid)}"></div>
       <div class="field"><label>${t("op")} <span class="muted">(${t("opHint")})</span></label><input id="f_op" value="${esc(f.op)}" placeholder="RF" maxlength="4"></div>
       <div class="field"><label>${t("age")}</label><input id="f_age" type="number" min="0" max="120" value="${esc(f.age)}" placeholder="45"></div>
@@ -306,6 +314,26 @@ async function render() {
     const keep = () => { f.pid = $("#f_pid").value; f.op = $("#f_op").value; f.age = $("#f_age").value; f.note = $("#f_note").value; };
     m.querySelectorAll("[data-sex]").forEach((b) => (b.onclick = () => { keep(); f.sex = b.dataset.sex; render(); }));
     paintGate();
+    if (u) {
+      $("#unf_go").onclick = async () => {
+        $("#unf_go").disabled = true; $("#unf_go").textContent = t("resuming");
+        try {
+          const r = await invoke("resume_session", { pid: u.pid });
+          st.sess = { ...r.start, seq: seqOf(r.start.rounds) };
+          st.idx = Math.min(r.idx, st.sess.seq.length - 1); st.error = ""; st.unfinished = null;
+          if (r.pending) { st.scan = r.pending; st.screen = "review"; }
+          else if (r.idx >= st.sess.seq.length) { await invoke("finish_session", { pid: u.pid }); st.scan = null; st.screen = "done"; }
+          else { st.scan = null; st.screen = "scan"; }
+        } catch (e) { st.error = e; st.unfinished = undefined; }
+        render();
+      };
+      let armed = false; const cb = $("#unf_cancel");
+      cb.onclick = async () => {
+        if (!armed) { armed = true; cb.textContent = t("cancelSure"); cb.classList.add("armed"); setTimeout(() => { armed = false; if (cb.isConnected) { cb.textContent = t("cancel"); cb.classList.remove("armed"); } }, 4000); return; }
+        try { await invoke("cancel_session", { pid: u.pid }); } catch (e) { st.error = e; }
+        st.unfinished = undefined; st.form.pid = ""; render();
+      };
+    }
     $("#go").onclick = async () => {
       keep(); st.error = "";
       if (!f.op.trim()) { m.querySelector("h1").insertAdjacentHTML("afterend", `<div class="err">${t("e_OP")}</div>`); return; }
@@ -313,7 +341,7 @@ async function render() {
       try {
         const info = await invoke("start_session", { pid: f.pid, operator: f.op, age: f.age === "" ? null : Number(f.age), sex: f.sex, note: f.note });
         st.sess = { ...info, seq: seqOf(info.rounds) };
-        st.idx = 0; st.scan = null; st.screen = "scan";
+        st.idx = 0; st.scan = null; st.screen = "scan"; st.unfinished = undefined;
         sc.lock = false; if (sc.test && !sc.test.ok) sc.test = null;
       } catch (e) { st.error = e; noteScanError(e); }
       st.busy = false; render(); pollScanner();

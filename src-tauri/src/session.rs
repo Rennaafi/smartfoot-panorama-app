@@ -237,6 +237,36 @@ pub fn complete(dir: &Path) -> Result<(), String> {
     write_session(dir, &s)
 }
 
+/// The order scans are taken in: right foot then left foot, round by round.
+pub fn seq(rounds: u8) -> Vec<(&'static str, u8)> {
+    let mut v = Vec::new();
+    for r in 1..=rounds {
+        v.push(("right", r));
+        v.push(("left", r));
+    }
+    v
+}
+
+/// Index into `seq` of the first scan that is not accepted yet (scans are taken in order).
+pub fn next_index(s: &SessionFile) -> usize {
+    let q = seq(s.rounds);
+    q.iter().position(|(side, r)| !s.scans.iter().any(|e| e.side == *side && e.round == *r)).unwrap_or(q.len())
+}
+
+/// The newest session that was started but neither finished nor cancelled (e.g. the app closed or
+/// crashed in the middle of a patient).
+pub fn find_unfinished(data_dir: &Path) -> Option<SessionFile> {
+    let mut v: Vec<SessionFile> = std::fs::read_dir(data_dir)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .filter_map(|e| read_session(&e.path()).ok())
+        .filter(|s| !s.completed && !s.cancelled)
+        .collect();
+    v.sort_by(|a, b| b.created.cmp(&a.created));
+    v.into_iter().next()
+}
+
 #[derive(Serialize, Clone, Debug)]
 pub struct SessionSummary {
     pub pid: String,
@@ -349,6 +379,29 @@ mod tests {
         assert_eq!(text.lines().count(), 2);
         assert!(text.lines().nth(1).unwrap().contains("\"R,F\"") && text.contains("EDGE"));
         assert_eq!(list_sessions(&d).len(), 1);
+    }
+
+    #[test]
+    fn resume_finds_the_newest_unfinished_session_and_the_next_scan() {
+        let d = tmp("resume");
+        assert!(find_unfinished(&d).is_none());
+        let old = create_session(&d, "SFP-0001", "RF", None, "f", "", 3, "x").unwrap();
+        complete(&old).unwrap();
+        assert!(find_unfinished(&d).is_none());
+        std::thread::sleep(std::time::Duration::from_millis(1100)); // created is stored to the second
+        let dir = create_session(&d, "SFP-0002", "RF", None, "f", "", 3, "x").unwrap();
+        assert_eq!(find_unfinished(&d).unwrap().pid, "SFP-0002");
+        assert_eq!(next_index(&read_session(&dir).unwrap()), 0);
+        for (side, r) in [("right", 1u8), ("left", 1)] {
+            std::fs::write(dir.join("_pending").join(format!("{side}_{r}.png")), b"a").unwrap();
+            accept(&dir, side, r, 12.0, 10, 10, vec![]).unwrap();
+        }
+        let s = read_session(&dir).unwrap();
+        assert_eq!(next_index(&s), 2); // next = right, round 2
+        assert_eq!(seq(3)[next_index(&s)], ("right", 2));
+        assert_eq!(seq(1).len(), 2);
+        cancel(&dir).unwrap();
+        assert!(find_unfinished(&d).is_none());
     }
 
     #[test]
