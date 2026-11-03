@@ -7,7 +7,7 @@ const T = {
     steps: ["Mulai", "Pindai", "Tinjau", "Selesai"], team: "⚙ Tim",
     start: "Sesi baru", startSub: "Isi data singkat pasien. Tidak perlu nama.",
     pid: "ID pasien", age: "Usia", sex: "Jenis kelamin", f: "Perempuan", m: "Laki-laki",
-    op: "Inisial operator", opHint: "wajib diisi", note: "Catatan (opsional)", go: "Mulai pindai", starting: "Memeriksa pemindai…",
+    op: "Inisial operator", opHint: "wajib diisi", note: "Catatan (opsional)", go: "Mulai pindai", starting: "Memeriksa scanner…",
     scan: "Pindai kaki", scanSub: "Letakkan kaki di atas kaca, tumit pada penahan. Diam sampai pemindaian selesai.",
     left: "Kaki kiri", right: "Kaki kanan", putaran: "Putaran", doScan: "Mulai pindai", scanning: "Memindai… jangan gerakkan kaki", ready: "Siap",
     review: "Tinjau hasil", reviewSub: "Garis biru = tepi kaki yang terdeteksi. Pastikan sesuai bentuk kaki.",
@@ -20,12 +20,12 @@ const T = {
     teamOnly: "Area tim · tidak ditampilkan di alur perawat",
     rnd: "Jumlah putaran bawaan", r1: "1 putaran", r3: "3 putaran", rndNote: "Tercatat di setiap file sesi.",
     dataf: "Folder data", save: "Simpan", saved2: "Tersimpan ✓", station: "Kode laptop", stationNote: "Awalan ID pasien, unik per laptop (1–4 huruf/angka). Jangan sama dengan laptop lain.",
-    scanner: "Pemindai", auto: "Otomatis (LiDE 300)", refresh: "Segarkan daftar",
+    scanner: "Scanner", auto: "Otomatis (LiDE 300)", refresh: "↻ Refresh",
     cal: "Kalibrasi skala", calNote: "Alat kalibrasi belum dibuat. Sementara semua sesi dicatat tanpa kalibrasi (anggap 300 dpi nominal).",
     back: "← Kembali", cancel: "Batalkan sesi", cancelSure: "Yakin? Tekan lagi untuk batal",
-    e_NOT_FOUND: "Pemindai tidak ditemukan. Periksa kabel USB dan pastikan pemindai menyala.",
-    e_LOCKED: "Gambar kosong: kunci transportasi pemindai masih tertutup. Buka kunci (LOCK) lalu ulangi.",
-    e_BUSY: "Pemindai sedang sibuk. Tunggu beberapa detik lalu coba lagi.",
+    e_NOT_FOUND: "Scanner tidak ditemukan. Periksa kabel USB dan pastikan scanner menyala.",
+    e_LOCKED: "Scan tidak bisa dimulai: kunci transportasi scanner (LOCK) kemungkinan masih tertutup. Buka kunci lalu ulangi.",
+    e_BUSY: "Scanner sedang sibuk. Tunggu beberapa detik lalu coba lagi.",
     e_BAD_STATION: "Kode laptop harus 1–4 huruf atau angka.", e_SCAN_FAILED: "Pemindaian gagal", e_ID_USED: "ID ini sudah dipakai. Gunakan ID lain.", e_EMPTY_ID: "ID pasien kosong.", e_OP: "Isi inisial operator.",
     retry: "Coba lagi",
     resBtn: "Layar riset →", res: "Layar riset", resSub: "Angka ukuran dari pemindaian. Tanpa label datar/normal/tinggi.",
@@ -34,6 +34,13 @@ const T = {
     resUncal: "Belum dikalibrasi: angka memakai 300 dpi nominal, jangan dipakai sebagai hasil akhir.", resNoMeas: "Pemindaian ini tidak bisa diukur (kaki tidak ditemukan).",
     resNoLabel: "Tidak ada label klasifikasi. Batas AI belum divalidasi untuk posisi duduk.",
     resGap: "Dasar jari dari celah antar jari", resProp: "Dasar jari diperkirakan 75% panjang (jari menempel)", resCsv: "File CSV",
+    scChecking: "Memeriksa scanner…", scReady: "Scanner siap", scMissing: "Scanner tidak terdeteksi", scAttn: "Scanner perlu dicek",
+    scMissingMsg: "Cabut lalu colok kembali kabel USB scanner, dan pastikan scanner menyala.",
+    scNullMsg: "Windows memasang driver kosong (Null Driver) sehingga scanner tidak bisa dipakai. Cabut lalu colok kembali kabel USB; jika tetap begini, hubungi tim.",
+    scPanel: "Pemeriksaan scanner", scState: "Status", scFound: "Perangkat terdeteksi", scNone: "tidak ada", scRoute: "Jalur yang dipakai", scNullRow: "Null Driver",
+    scDriverless: "Driverless (disarankan)", scCanon: "Driver Canon", scOther: "Lainnya", scNo: "tidak ada", scYes: "ADA, cabut dan colok kembali",
+    scTest: "Tes scanner", scTesting: "Menguji… (sampai ±25 detik)", scTestNote: "Memindai strip kecil tanpa kaki di kaca. Membuktikan scanner benar-benar bisa memindai dan kunci LOCK terbuka.",
+    scLast: "Tes terakhir", scNever: "belum ada", scPass: "berhasil", scFail: "gagal",
     kFL: "Panjang kaki", kFW: "Lebar kaki", kArea: "Luas kontak", kToeless: "Luas tanpa jari", kA: "Tumit (A)", kB: "Lengkung (B)", kC: "Depan (C)", kAI: "Arch index (AI)", kCSI: "Chippaux-Smirak (%)",
   },
   en: {
@@ -53,11 +60,11 @@ const T = {
     teamOnly: "Team area · not shown in the nurse flow",
     rnd: "Default number of rounds", r1: "1 round", r3: "3 rounds", rndNote: "Recorded in every session file.",
     dataf: "Data folder", save: "Save", saved2: "Saved ✓", station: "Laptop code", stationNote: "Prefix of patient IDs, unique per laptop (1–4 letters/digits). Never the same as another laptop.",
-    scanner: "Scanner", auto: "Automatic (LiDE 300)", refresh: "Refresh list",
+    scanner: "Scanner", auto: "Automatic (LiDE 300)", refresh: "↻ Refresh",
     cal: "Scale calibration", calNote: "The calibration tool is not built yet. Until then every session is recorded without calibration (nominal 300 dpi assumed).",
     back: "← Back", cancel: "Cancel session", cancelSure: "Sure? Press again to cancel",
     e_NOT_FOUND: "Scanner not found. Check the USB cable and that the scanner is switched on.",
-    e_LOCKED: "Blank image: the scanner's transport lock is still closed. Open the LOCK switch and retake.",
+    e_LOCKED: "The scan could not start: the scanner's transport LOCK switch is probably still closed. Open it and try again.",
     e_BUSY: "The scanner is busy. Wait a few seconds and try again.",
     e_BAD_STATION: "The laptop code needs 1–4 letters or digits.", e_SCAN_FAILED: "Scan failed", e_ID_USED: "This ID is already used. Pick another ID.", e_EMPTY_ID: "The patient ID is empty.", e_OP: "Enter the operator initials.",
     retry: "Try again",
@@ -67,6 +74,13 @@ const T = {
     resUncal: "Not calibrated: numbers use nominal 300 dpi, do not use them as final results.", resNoMeas: "This scan could not be measured (no foot found).",
     resNoLabel: "No classification label. AI cutoffs are not validated for seated posture.",
     resGap: "Toe base from the gaps between toes", resProp: "Toe base estimated at 75% of length (toes touching)", resCsv: "CSV file",
+    scChecking: "Checking scanner…", scReady: "Scanner ready", scMissing: "Scanner not detected", scAttn: "Scanner needs attention",
+    scMissingMsg: "Unplug and replug the scanner's USB cable, and make sure the scanner is switched on.",
+    scNullMsg: "Windows installed an empty driver (Null Driver), so the scanner cannot be used. Unplug and replug the USB cable; if it stays like this, call the team.",
+    scPanel: "Scanner check", scState: "Status", scFound: "Devices detected", scNone: "none", scRoute: "Route in use", scNullRow: "Null Driver",
+    scDriverless: "Driverless (preferred)", scCanon: "Canon driver", scOther: "Other", scNo: "none", scYes: "PRESENT, unplug and replug",
+    scTest: "Test scanner", scTesting: "Testing… (up to ~25 s)", scTestNote: "Scans a small strip with no foot on the glass. Proves the scanner can really scan and the LOCK switch is open.",
+    scLast: "Last test", scNever: "none yet", scPass: "passed", scFail: "failed",
     kFL: "Foot length", kFW: "Foot width", kArea: "Contact area", kToeless: "Area without toes", kA: "Hindfoot (A)", kB: "Midfoot (B)", kC: "Forefoot (C)", kAI: "Arch index (AI)", kCSI: "Chippaux-Smirak (%)",
   },
 };
@@ -75,6 +89,82 @@ let L = localStorage.getItem("lang") || "id";
 const t = (k) => T[L][k];
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+// ---- scanner status: chip in the top bar, gate on the start screen, panel in team settings ----
+const sc = { phase: "checking", status: null, lock: false, test: null, testing: false };
+const POLL_MS = 4000;
+
+// In Indonesian text the English word "scanner" is written in italics.
+function italicize(root) {
+  if (L !== "id" || !root) return;
+  const w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  const hits = [];
+  for (let n; (n = w.nextNode()); ) {
+    if (/scanner/i.test(n.nodeValue) && !n.parentElement.closest("option,input,textarea,script,style,i.sc")) hits.push(n);
+  }
+  hits.forEach((n) => {
+    const f = document.createDocumentFragment();
+    n.nodeValue.split(/(scanner)/i).forEach((part, i) => {
+      if (i % 2) { const e = document.createElement("i"); e.className = "sc"; e.textContent = part; f.append(e); }
+      else if (part) f.append(document.createTextNode(part));
+    });
+    n.replaceWith(f);
+  });
+}
+
+// "ready" | "attn" | "missing" | "checking"
+function scLevel() {
+  if (sc.phase === "checking") return "checking";
+  const s = sc.status;
+  if (!s || !s.chosen) return "missing";
+  return sc.lock || s.null_driver || (sc.test && !sc.test.ok) ? "attn" : "ready";
+}
+function scMessage() {
+  const lv = scLevel();
+  if (lv === "missing") return sc.status?.null_driver ? t("scNullMsg") : t("scMissingMsg");
+  if (lv === "attn") return sc.lock ? t("e_LOCKED") : sc.status?.null_driver ? t("scNullMsg") : `${t("scFail")}: ${errText(sc.test.err).replace(/<[^>]*>/g, "")}`;
+  return "";
+}
+function paintChip() {
+  const lv = scLevel(), b = $("#schip");
+  if (!b) return;
+  b.className = "schip " + lv;
+  b.innerHTML = `<span class="d"></span>${esc(t({ ready: "scReady", attn: "scAttn", missing: "scMissing", checking: "scChecking" }[lv]))}`;
+  b.title = scMessage();
+  italicize(b);
+}
+function paintGate() {
+  const g = $("#scgate"), go = $("#go"), lv = scLevel();
+  if (g) { const msg = scMessage(); g.innerHTML = msg ? `<div class="${lv === "missing" ? "err" : "warn"}">${esc(msg)}</div>` : ""; italicize(g); }
+  if (go) go.toggleAttribute("disabled", st.busy || lv === "missing");
+}
+function paintPanel() {
+  const el = $("#scpanel"); if (!el) return;
+  const s = sc.status, lv = scLevel();
+  const kv = (k, v) => `<div class="kv"><span>${t(k)}</span><b>${v}</b></div>`;
+  const route = !s?.chosen ? "–" : esc(t({ driverless: "scDriverless", canon: "scCanon", other: "scOther" }[s.route] || "scOther"));
+  const last = sc.test ? (sc.test.ok ? `${t("scPass")} · ${sc.test.seconds.toFixed(1)} s` : `${t("scFail")} · ${errText(sc.test.err)}`) : t("scNever");
+  el.innerHTML = `<h2 style="font-size:20px;margin-bottom:10px">${t("scPanel")}</h2>
+    ${kv("scState", `<span class="chip ${lv === "ready" ? "ok" : lv === "checking" ? "" : "warn"}">${esc(t({ ready: "scReady", attn: "scAttn", missing: "scMissing", checking: "scChecking" }[lv]))}</span>`)}
+    ${kv("scFound", s?.devices?.length ? s.devices.map(esc).join("<br>") : t("scNone"))}
+    ${kv("scRoute", route)}${kv("scNullRow", s?.null_driver ? `<span style="color:var(--bad)">${t("scYes")}</span>` : t("scNo"))}${kv("scLast", last)}
+    <p class="muted" style="margin:12px 0 14px">${t("scTestNote")}</p>
+    <button class="btn ghost" id="sctest" style="padding:12px 18px;font-size:16px" ${sc.testing || lv === "missing" ? "disabled" : ""}>${sc.testing ? t("scTesting") : t("scTest")}</button>`;
+  $("#sctest").onclick = runScannerTest;
+  italicize(el);
+}
+async function pollScanner() {
+  if (st.busy || sc.testing || st.scanning) return; // never touch the scanner while it works
+  try { sc.status = await invoke("scanner_status"); } catch { sc.status = null; }
+  sc.phase = "done"; paintChip(); paintGate(); paintPanel();
+}
+async function runScannerTest() {
+  sc.testing = true; paintPanel();
+  try { const secs = await invoke("test_scanner"); sc.test = { ok: true, seconds: secs }; sc.lock = false; }
+  catch (e) { sc.test = { ok: false, err: e }; if (String(e).startsWith("LOCKED")) sc.lock = true; }
+  sc.testing = false; paintChip(); paintGate(); paintPanel();
+}
+function noteScanError(e) { if (String(e).startsWith("LOCKED")) { sc.lock = true; paintChip(); } }
 
 const st = { screen: "start", prev: "start", form: { pid: "", op: "", age: "", sex: "f", note: "" }, sess: null, idx: 0, scan: null, error: "", busy: false, settings: null, scanners: [] };
 const STEP = { start: 0, scan: 1, review: 2, done: 3 };
@@ -206,7 +296,7 @@ async function render() {
   if (s === "start") {
     if (!st.form.pid) { try { st.form.pid = await invoke("new_session_id"); } catch (e) { st.error = e; } }
     const f = st.form;
-    m.innerHTML = `<h1>${t("start")}</h1><p class="sub">${t("startSub")}</p>${errBox()}<div class="card"><div class="grid2">
+    m.innerHTML = `<h1>${t("start")}</h1><p class="sub">${t("startSub")}</p><div id="scgate"></div>${errBox()}<div class="card"><div class="grid2">
       <div class="field"><label>${t("pid")}</label><input id="f_pid" value="${esc(f.pid)}"></div>
       <div class="field"><label>${t("op")} <span class="muted">(${t("opHint")})</span></label><input id="f_op" value="${esc(f.op)}" placeholder="RF" maxlength="4"></div>
       <div class="field"><label>${t("age")}</label><input id="f_age" type="number" min="0" max="120" value="${esc(f.age)}" placeholder="45"></div>
@@ -215,6 +305,7 @@ async function render() {
       <div class="row"><button class="btn right" id="go" ${st.busy ? "disabled" : ""}>${st.busy ? t("starting") : t("go") + " →"}</button></div></div>`;
     const keep = () => { f.pid = $("#f_pid").value; f.op = $("#f_op").value; f.age = $("#f_age").value; f.note = $("#f_note").value; };
     m.querySelectorAll("[data-sex]").forEach((b) => (b.onclick = () => { keep(); f.sex = b.dataset.sex; render(); }));
+    paintGate();
     $("#go").onclick = async () => {
       keep(); st.error = "";
       if (!f.op.trim()) { m.querySelector("h1").insertAdjacentHTML("afterend", `<div class="err">${t("e_OP")}</div>`); return; }
@@ -223,8 +314,9 @@ async function render() {
         const info = await invoke("start_session", { pid: f.pid, operator: f.op, age: f.age === "" ? null : Number(f.age), sex: f.sex, note: f.note });
         st.sess = { ...info, seq: seqOf(info.rounds) };
         st.idx = 0; st.scan = null; st.screen = "scan";
-      } catch (e) { st.error = e; }
-      st.busy = false; render();
+        sc.lock = false; if (sc.test && !sc.test.ok) sc.test = null;
+      } catch (e) { st.error = e; noteScanError(e); }
+      st.busy = false; render(); pollScanner();
     };
   }
 
@@ -238,9 +330,11 @@ async function render() {
       st.error = ""; $("#sgo").disabled = true; $("#sstate").textContent = t("scanning");
       let p = 0; const iv = setInterval(() => { p += (95 - p) * 0.04; $("#sbar").style.width = p + "%"; }, 400);
       try {
+        st.scanning = true;
         st.scan = await invoke("scan_foot", { pid: st.sess.pid, side, round: r });
-        clearInterval(iv); st.screen = "review";
-      } catch (e) { clearInterval(iv); st.error = e; }
+        clearInterval(iv); st.screen = "review"; sc.lock = false; if (sc.test && !sc.test.ok) sc.test = null;
+      } catch (e) { clearInterval(iv); st.error = e; noteScanError(e); }
+      st.scanning = false;
       render();
     };
   }
@@ -286,17 +380,19 @@ async function render() {
         <label>${t("dataf")}</label><div class="row"><input id="s_dir" value="${esc(c.data_dir)}" style="flex:1"><button class="btn ghost" id="s_save" style="padding:12px 18px;font-size:16px">${t("save")}</button></div>
         <label style="margin-top:22px">${t("station")}</label><div class="row"><input id="s_station" value="${esc(c.station)}" maxlength="4" style="flex:1;text-transform:uppercase"><button class="btn ghost" id="s_stsave" style="padding:12px 18px;font-size:16px">${t("save")}</button></div><p class="muted" style="margin:6px 0 0">${t("stationNote")}</p>
         <label style="margin-top:22px">${t("scanner")}</label><div class="row"><select id="s_dev" style="flex:1"><option value="">${t("auto")}</option>${st.scanners.map((d) => `<option ${c.scanner == d ? "selected" : ""}>${esc(d)}</option>`).join("")}</select><button class="btn ghost" id="s_ref" style="padding:12px 18px;font-size:16px">${t("refresh")}</button></div></div>
-      <div class="card"><h2 style="font-size:20px;margin-bottom:6px">${t("cal")}</h2><p class="muted">${t("calNote")}</p></div></div>
+      <div><div class="card" id="scpanel"></div><div class="card" style="margin-top:18px"><h2 style="font-size:20px;margin-bottom:6px">${t("cal")}</h2><p class="muted">${t("calNote")}</p></div></div></div>
       <div class="row" style="margin-top:22px"><button class="btn ghost" id="back">${t("back")}</button><button class="btn right" id="gores">${t("resBtn")}</button></div>`;
+    paintPanel();
     $("#gores").onclick = openResearch;
     const persist = async (patch) => { try { st.settings = await invoke("set_settings", { new: { ...st.settings, ...patch } }); st.error = ""; } catch (e) { st.error = e; } render(); };
     m.querySelectorAll("[data-r]").forEach((b) => (b.onclick = () => persist({ rounds: Number(b.dataset.r) })));
     $("#s_save").onclick = () => persist({ data_dir: $("#s_dir").value.trim() });
     $("#s_stsave").onclick = () => { st.form.pid = ""; persist({ station: $("#s_station").value }); };
     $("#s_dev").onchange = (e) => persist({ scanner: e.target.value || null });
-    $("#s_ref").onclick = async () => { try { st.scanners = await invoke("list_scanners"); } catch (e) { st.error = e; } render(); };
+    $("#s_ref").onclick = async () => { try { st.scanners = await invoke("list_scanners"); } catch (e) { st.error = e; } render(); pollScanner(); };
     $("#back").onclick = () => { st.screen = st.prev; st.error = ""; render(); };
   }
+  italicize($("aside")); italicize(m); paintChip();
 }
 
 $("#lang").onclick = () => { L = L == "id" ? "en" : "id"; localStorage.setItem("lang", L); render(); };
@@ -310,7 +406,10 @@ $("#teamBtn").onclick = async () => {
   }
   render();
 };
+$("#schip").onclick = () => { sc.phase = "checking"; paintChip(); pollScanner(); };
 render();
+pollScanner();
+setInterval(pollScanner, POLL_MS);
 
 // ripple from the exact touch point on any button
 document.addEventListener("pointerdown", (e) => {

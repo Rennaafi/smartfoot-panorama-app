@@ -12,6 +12,17 @@ fn main() {
             Ok(v) => v.iter().enumerate().for_each(|(i, d)| println!("[{}] {d}", i + 1)),
             Err(e) => eprintln!("error: {e}"),
         },
+        Some("status") => match scanner::status(None) {
+            Ok(s) => println!("{}", serde_json::to_string_pretty(&s).unwrap()),
+            Err(e) => eprintln!("error: {e}"),
+        },
+        Some("test") => match scanner::status(None).and_then(|s| s.chosen.ok_or("NOT_FOUND: no scanner".to_string())) {
+            Ok(dev) => match scanner::test_scan(&dev, &std::env::temp_dir()) {
+                Ok(secs) => println!("test scan OK on {dev}: {secs:.1} s"),
+                Err(e) => eprintln!("test scan FAILED on {dev}: {e}"),
+            },
+            Err(e) => eprintln!("error: {e}"),
+        },
         Some("scan") if a.len() == 4 => {
             let dpi: u32 = a[2].parse().expect("dpi must be a number");
             match scanner::scan(&a[1], dpi, Path::new(&a[3])) {
@@ -30,6 +41,6 @@ fn main() {
             Ok(m) => println!("{}", serde_json::to_string_pretty(&m).unwrap()),
             Err(e) => eprintln!("error: {e}"),
         },
-        _ => eprintln!("usage: scan_cli list | scan <device> <dpi> <out.png> | analyze <scan.png> <preview.png> | measure <scan.png>"),
+        _ => eprintln!("usage: scan_cli list | status | test | scan <device> <dpi> <out.png> | analyze <scan.png> <preview.png> | measure <scan.png>"),
     }
 }

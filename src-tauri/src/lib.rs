@@ -31,15 +31,7 @@ fn data_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
 /// The scanner patients are scanned on: the setting if present, else the LiDE 300 driverless route.
 fn choose_device(s: &Settings) -> Result<String, String> {
     let all = scanner::list_scanners()?;
-    if let Some(want) = &s.scanner {
-        if all.contains(want) {
-            return Ok(want.clone());
-        }
-    }
-    all.iter()
-        .find(|d| d.contains("LiDE 300") && d.contains("HTTP"))
-        .or_else(|| all.iter().find(|d| d.contains("LiDE 300")))
-        .cloned()
+    scanner::pick(&all, s.scanner.as_deref())
         .ok_or_else(|| "NOT_FOUND: scanner not found. Check the USB cable and that the scanner is switched on.".to_string())
 }
 
@@ -67,6 +59,26 @@ async fn list_scanners() -> Result<Vec<String>, String> {
     tauri::async_runtime::spawn_blocking(scanner::list_scanners).await.map_err(|e| e.to_string())?
 }
 
+/// Is a scanner connected, and through which route? Cheap enough to call every few seconds.
+#[tauri::command]
+async fn scanner_status(app: tauri::AppHandle) -> Result<scanner::ScannerStatus, String> {
+    tauri::async_runtime::spawn_blocking(move || scanner::status(settings(&app)?.scanner.as_deref()))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+/// Hardware test (a short strip scan): returns how many seconds it took.
+#[tauri::command]
+async fn test_scanner(app: tauri::AppHandle) -> Result<f64, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let s = settings(&app)?;
+        let dev = choose_device(&s)?;
+        scanner::test_scan(&dev, &std::env::temp_dir())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 #[tauri::command]
 fn new_session_id(app: tauri::AppHandle) -> Result<String, String> {
     let s = settings(&app)?;
@@ -86,6 +98,7 @@ async fn start_session(app: tauri::AppHandle, pid: String, operator: String, age
     tauri::async_runtime::spawn_blocking(move || {
         let s = settings(&app)?;
         let dev = choose_device(&s)?; // fail early if the scanner is not there
+        scanner::warm_if_cold(&dev, &std::env::temp_dir())?; // also catches a closed LOCK switch before the patient sits down
         let dir = session::create_session(&PathBuf::from(&s.data_dir), &pid, &operator, age, &sex, &note, s.rounds, &dev)?;
         Ok(StartInfo { pid: session::clean_pid(&pid)?, rounds: s.rounds, dir: dir.to_string_lossy().into(), scanner: dev })
     })
@@ -245,6 +258,8 @@ pub fn run() {
             get_settings,
             set_settings,
             list_scanners,
+            scanner_status,
+            test_scanner,
             new_session_id,
             start_session,
             scan_foot,
