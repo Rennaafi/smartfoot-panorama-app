@@ -1,7 +1,7 @@
 //! Hardware test tool: `cargo run --bin scan_cli -- list` or
 //! `cargo run --bin scan_cli -- scan "Canon LiDE 300 HTTP" 300 out.png`
 
-use smartfoot_app_lib::{analyze, measure, scanner};
+use smartfoot_app_lib::{analyze, backup, measure, scanner};
 use std::path::Path;
 
 fn main() {
@@ -23,6 +23,10 @@ fn main() {
             },
             Err(e) => eprintln!("error: {e}"),
         },
+        Some("backup") if a.len() == 3 => match backup::sync_all(Path::new(&a[1]), Path::new(&a[2])) {
+            Ok(n) => println!("backup OK: {n} file(s) copied"),
+            Err(e) => eprintln!("backup FAILED: {e}"),
+        },
         Some("scan") if a.len() == 4 => {
             let dpi: u32 = a[2].parse().expect("dpi must be a number");
             match scanner::scan(&a[1], dpi, Path::new(&a[3])) {
@@ -41,6 +45,6 @@ fn main() {
             Ok(m) => println!("{}", serde_json::to_string_pretty(&m).unwrap()),
             Err(e) => eprintln!("error: {e}"),
         },
-        _ => eprintln!("usage: scan_cli list | status | test | scan <device> <dpi> <out.png> | analyze <scan.png> <preview.png> | measure <scan.png>"),
+        _ => eprintln!("usage: scan_cli list | status | test | backup <data_dir> <backup_dir> | scan <device> <dpi> <out.png> | analyze <scan.png> <preview.png> | measure <scan.png>"),
     }
 }

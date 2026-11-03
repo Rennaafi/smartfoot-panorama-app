@@ -1,4 +1,5 @@
 pub mod analyze;
+pub mod backup;
 pub mod measure;
 pub mod scanner;
 pub mod session;
@@ -22,6 +23,16 @@ fn settings(app: &tauri::AppHandle) -> Result<Settings, String> {
         session::save_settings(&file, &s)?;
     }
     Ok(s)
+}
+
+/// Mirror one session to the second-copy folder, if one is set. Never fails the caller: a failed
+/// copy is remembered in `backup::status` and shown in the app.
+fn mirror(app: &tauri::AppHandle, dir: &std::path::Path) {
+    if let Ok(s) = settings(app) {
+        if let Some(b) = s.backup_dir.as_deref().map(str::trim).filter(|b| !b.is_empty()) {
+            let _ = backup::sync_session(&PathBuf::from(&s.data_dir), dir, &PathBuf::from(b));
+        }
+    }
 }
 
 fn data_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
@@ -50,6 +61,10 @@ fn set_settings(app: tauri::AppHandle, mut new: Settings) -> Result<Settings, St
         return Err("rounds must be 1 or 3".into());
     }
     std::fs::create_dir_all(&new.data_dir).map_err(|e| format!("cannot use data folder: {e}"))?;
+    new.backup_dir = new.backup_dir.take().map(|b| b.trim().to_string()).filter(|b| !b.is_empty());
+    if let Some(b) = &new.backup_dir {
+        backup::check_dir(&PathBuf::from(&new.data_dir), &PathBuf::from(b))?;
+    }
     session::save_settings(&settings_file(&app)?, &new)?;
     Ok(new)
 }
@@ -74,6 +89,24 @@ async fn test_scanner(app: tauri::AppHandle) -> Result<f64, String> {
         let s = settings(&app)?;
         let dev = choose_device(&s)?;
         scanner::test_scan(&dev, &std::env::temp_dir())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// State of the second copy: set or not, folder reachable, last result.
+#[tauri::command]
+fn backup_status(app: tauri::AppHandle) -> Result<backup::BackupStatus, String> {
+    Ok(backup::status(settings(&app)?.backup_dir.as_deref()))
+}
+
+/// Copy everything to the second folder now (also the first copy of older sessions).
+#[tauri::command]
+async fn backup_now(app: tauri::AppHandle) -> Result<usize, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let s = settings(&app)?;
+        let b = s.backup_dir.as_deref().map(str::trim).filter(|b| !b.is_empty()).ok_or("BACKUP_OFF: no backup folder is set")?;
+        backup::sync_all(&PathBuf::from(&s.data_dir), &PathBuf::from(b))
     })
     .await
     .map_err(|e| e.to_string())?
@@ -227,6 +260,7 @@ async fn accept_scan(app: tauri::AppHandle, pid: String, side: String, round: u8
         let m = measure::measure_scan(&dir.join("scans").join(format!("{side}_{round}.png")), &current_scale(), None).ok();
         session::set_measurements(&dir, &side, round, m)?;
         session::rebuild_csv(&dd)?;
+        mirror(&app, &dir);
         Ok(())
     })
     .await
@@ -235,7 +269,10 @@ async fn accept_scan(app: tauri::AppHandle, pid: String, side: String, round: u8
 
 #[tauri::command]
 fn retake_scan(app: tauri::AppHandle, pid: String, side: String, round: u8) -> Result<(), String> {
-    session::reject(&session::session_dir(&data_dir(&app)?, &pid)?, &side, round)
+    let dir = session::session_dir(&data_dir(&app)?, &pid)?;
+    session::reject(&dir, &side, round)?;
+    mirror(&app, &dir);
+    Ok(())
 }
 
 #[tauri::command]
@@ -297,6 +334,7 @@ async fn remeasure(app: tauri::AppHandle, pid: String, side: String, round: u8, 
         let m = measure::measure_scan(&dir.join("scans").join(format!("{side}_{round}.png")), &current_scale(), pts)?;
         session::set_measurements(&dir, &side, round, Some(m.clone()))?;
         session::rebuild_csv(&dd)?;
+        mirror(&app, &dir);
         Ok(m)
     })
     .await
@@ -305,12 +343,18 @@ async fn remeasure(app: tauri::AppHandle, pid: String, side: String, round: u8, 
 
 #[tauri::command]
 fn cancel_session(app: tauri::AppHandle, pid: String) -> Result<bool, String> {
-    session::cancel(&session::session_dir(&data_dir(&app)?, &pid)?)
+    let dir = session::session_dir(&data_dir(&app)?, &pid)?;
+    let removed = session::cancel(&dir)?;
+    mirror(&app, &dir); // a removed (empty) session leaves nothing to copy
+    Ok(removed)
 }
 
 #[tauri::command]
 fn finish_session(app: tauri::AppHandle, pid: String) -> Result<(), String> {
-    session::complete(&session::session_dir(&data_dir(&app)?, &pid)?)
+    let dir = session::session_dir(&data_dir(&app)?, &pid)?;
+    session::complete(&dir)?;
+    mirror(&app, &dir);
+    Ok(())
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -322,6 +366,8 @@ pub fn run() {
             set_settings,
             list_scanners,
             scanner_status,
+            backup_status,
+            backup_now,
             test_scanner,
             new_session_id,
             find_unfinished,

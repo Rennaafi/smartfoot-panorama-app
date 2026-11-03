@@ -18,6 +18,9 @@ pub struct Settings {
     /// Short code that makes patient IDs unique per laptop: SFP-<station>-0001.
     #[serde(default)]
     pub station: String,
+    /// Folder for the second copy of all data (None = no second copy).
+    #[serde(default)]
+    pub backup_dir: Option<String>,
 }
 
 impl Default for Settings {
@@ -28,7 +31,7 @@ impl Default for Settings {
             let home = std::env::var("USERPROFILE").unwrap_or_else(|_| "C:\\".into());
             format!("{home}\\Documents\\SmartFoot_Data")
         };
-        Settings { data_dir, rounds: 3, scanner: None, station: String::new() }
+        Settings { data_dir, rounds: 3, scanner: None, station: String::new(), backup_dir: None }
     }
 }
 

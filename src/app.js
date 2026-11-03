@@ -4,7 +4,7 @@ const invoke = (cmd, args) => window.__TAURI__.core.invoke(cmd, args);
 
 const T = {
   id: {
-    steps: ["Mulai", "Pindai", "Tinjau", "Selesai"], team: "⚙ Tim",
+    steps: ["Mulai", "Pindai", "Tinjau", "Selesai"], team: "⚙ Settings",
     start: "Sesi baru", startSub: "Isi data singkat pasien. Tidak perlu nama.",
     pid: "ID pasien", age: "Usia", sex: "Jenis kelamin", f: "Perempuan", m: "Laki-laki",
     op: "Inisial operator", opHint: "wajib diisi", note: "Catatan (opsional)", go: "Mulai pindai", starting: "Memeriksa scanner…",
@@ -16,7 +16,7 @@ const T = {
     wEdge: "Kaki menyentuh tepi gambar. Geser kaki menjauhi tepi, lalu ulangi.",
     accept: "Terima", acceptAnyway: "Tetap terima", retake: "Ulangi", saving: "Menyimpan…",
     done: "Sesi selesai", doneSub: "Semua pemindaian tersimpan.", saved: "Tersimpan di", scans: "pemindaian", newS: "Sesi baru",
-    set: "Pengaturan tim", setSub: "Hanya untuk tim peneliti. Perawat tidak perlu membuka halaman ini.",
+    set: "Pengaturan", setSub: "Hanya untuk tim peneliti. Perawat tidak perlu membuka halaman ini.",
     teamOnly: "Area tim · tidak ditampilkan di alur perawat",
     rnd: "Jumlah putaran bawaan", r1: "1 putaran", r3: "3 putaran", rndNote: "Tercatat di setiap file sesi.",
     dataf: "Folder data", save: "Simpan", saved2: "Tersimpan ✓", station: "Kode laptop", stationNote: "Awalan ID pasien, unik per laptop (1–4 huruf/angka). Jangan sama dengan laptop lain.",
@@ -43,10 +43,14 @@ const T = {
     scLast: "Tes terakhir", scNever: "belum ada", scPass: "berhasil", scFail: "gagal",
     unf: "Sesi belum selesai", unfSub: "Aplikasi tertutup di tengah sesi ini. Lanjutkan dari pemindaian berikutnya.", unfOf: "dari", unfScans: "pemindaian tersimpan", unfBy: "operator", resume: "Lanjutkan sesi", resuming: "Membuka…",
     e_NOT_RESUMABLE: "Sesi ini sudah selesai atau dibatalkan.",
+    bkLabel: "Salinan data kedua", bkNote: "Folder di disk, USB atau cloud lain. Setiap pemindaian yang diterima disalin otomatis. Kosongkan untuk mematikan.",
+    bkNow: "Cadangkan sekarang", bkNowBusy: "Menyalin…", bkOff: "Salinan kedua belum diatur (data hanya ada di satu disk).", bkOk: "Salinan terakhir berhasil", bkFiles: "file", bkNever: "Belum ada salinan sejak aplikasi dibuka.",
+    bkGone: "Folder salinan tidak bisa diakses (USB terlepas?). Data baru belum tersalin.", bkFail: "Salinan terakhir gagal",
+    e_BACKUP_SAME: "Folder salinan harus berbeda dari folder data (bukan di dalamnya, bukan induknya).", e_BACKUP_FAILED: "Folder salinan tidak bisa dipakai", e_BACKUP_OFF: "Folder salinan belum diatur.",
     kFL: "Panjang kaki", kFW: "Lebar kaki", kArea: "Luas kontak", kToeless: "Luas tanpa jari", kA: "Tumit (A)", kB: "Lengkung (B)", kC: "Depan (C)", kAI: "Arch index (AI)", kCSI: "Chippaux-Smirak (%)",
   },
   en: {
-    steps: ["Start", "Scan", "Review", "Done"], team: "⚙ Team",
+    steps: ["Start", "Scan", "Review", "Done"], team: "⚙ Settings",
     start: "New session", startSub: "Enter brief patient details. No name needed.",
     pid: "Patient ID", age: "Age", sex: "Sex", f: "Female", m: "Male",
     op: "Operator initials", opHint: "required", note: "Note (optional)", go: "Start scanning", starting: "Checking the scanner…",
@@ -58,7 +62,7 @@ const T = {
     wEdge: "The foot touches the image edge. Move it away from the edge, then retake.",
     accept: "Accept", acceptAnyway: "Accept anyway", retake: "Retake", saving: "Saving…",
     done: "Session complete", doneSub: "All scans are saved.", saved: "Saved to", scans: "scans", newS: "New session",
-    set: "Team settings", setSub: "For the research team only. Nurses never need this page.",
+    set: "Settings", setSub: "For the research team only. Nurses never need this page.",
     teamOnly: "Team area · not shown in the nurse flow",
     rnd: "Default number of rounds", r1: "1 round", r3: "3 rounds", rndNote: "Recorded in every session file.",
     dataf: "Data folder", save: "Save", saved2: "Saved ✓", station: "Laptop code", stationNote: "Prefix of patient IDs, unique per laptop (1–4 letters/digits). Never the same as another laptop.",
@@ -85,6 +89,10 @@ const T = {
     scLast: "Last test", scNever: "none yet", scPass: "passed", scFail: "failed",
     unf: "Unfinished session", unfSub: "The app closed in the middle of this session. Continue from the next scan.", unfOf: "of", unfScans: "scans saved", unfBy: "operator", resume: "Resume session", resuming: "Opening…",
     e_NOT_RESUMABLE: "This session is already finished or cancelled.",
+    bkLabel: "Second data copy", bkNote: "A folder on another disk, USB drive or cloud folder. Every accepted scan is copied automatically. Leave empty to turn it off.",
+    bkNow: "Back up now", bkNowBusy: "Copying…", bkOff: "No second copy set (the data lives on one disk only).", bkOk: "Last copy succeeded", bkFiles: "files", bkNever: "No copy yet since the app opened.",
+    bkGone: "The backup folder cannot be reached (USB unplugged?). New data has not been copied.", bkFail: "The last copy failed",
+    e_BACKUP_SAME: "The backup folder must be different from the data folder (not inside it, not its parent).", e_BACKUP_FAILED: "The backup folder cannot be used", e_BACKUP_OFF: "No backup folder is set.",
     kFL: "Foot length", kFW: "Foot width", kArea: "Contact area", kToeless: "Area without toes", kA: "Hindfoot (A)", kB: "Midfoot (B)", kC: "Forefoot (C)", kAI: "Arch index (AI)", kCSI: "Chippaux-Smirak (%)",
   },
 };
@@ -97,6 +105,8 @@ const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<
 // ---- scanner status: chip in the top bar, gate on the start screen, panel in team settings ----
 const sc = { phase: "checking", status: null, lock: false, test: null, testing: false };
 const POLL_MS = 4000;
+let bk = null; // second-copy status from Rust
+const bkLine = () => !bk?.enabled ? t("bkOff") : !bk.reachable ? t("bkGone") : bk.last_err ? `${t("bkFail")}: ${esc(bk.last_err)}` : bk.last_ok ? `${t("bkOk")}: ${esc(bk.last_ok)} · ${bk.last_files} ${t("bkFiles")}` : t("bkNever");
 
 // In Indonesian text the English word "scanner" is written in italics.
 function italicize(root) {
@@ -139,7 +149,11 @@ function paintChip() {
 }
 function paintGate() {
   const g = $("#scgate"), go = $("#go"), lv = scLevel();
-  if (g) { const msg = scMessage(); g.innerHTML = msg ? `<div class="${lv === "missing" ? "err" : "warn"}">${esc(msg)}</div>` : ""; italicize(g); }
+  if (g) {
+    const msg = scMessage(), bad = bk?.enabled && (!bk.reachable || bk.last_err);
+    g.innerHTML = (msg ? `<div class="${lv === "missing" ? "err" : "warn"}">${esc(msg)}</div>` : "") + (bad ? `<div class="warn">${bkLine()}</div>` : "");
+    italicize(g);
+  }
   if (go) go.toggleAttribute("disabled", st.busy || lv === "missing");
 }
 function paintPanel() {
@@ -160,6 +174,7 @@ function paintPanel() {
 async function pollScanner() {
   if (st.busy || sc.testing || st.scanning) return; // never touch the scanner while it works
   try { sc.status = await invoke("scanner_status"); } catch { sc.status = null; }
+  try { bk = await invoke("backup_status"); } catch { bk = null; }
   sc.phase = "done"; paintChip(); paintGate(); paintPanel();
 }
 async function runScannerTest() {
@@ -168,6 +183,7 @@ async function runScannerTest() {
   catch (e) { sc.test = { ok: false, err: e }; if (String(e).startsWith("LOCKED")) sc.lock = true; }
   sc.testing = false; paintChip(); paintGate(); paintPanel();
 }
+async function refreshBk() { try { bk = await invoke("backup_status"); } catch { bk = null; } render(); }
 function noteScanError(e) { if (String(e).startsWith("LOCKED")) { sc.lock = true; paintChip(); } }
 
 const st = { screen: "start", prev: "start", form: { pid: "", op: "", age: "", sex: "f", note: "" }, sess: null, idx: 0, scan: null, error: "", busy: false, settings: null, scanners: [], unfinished: undefined };
@@ -177,7 +193,7 @@ function errText(raw) {
   const m = String(raw).match(/^([A-Z_]+):\s*(.*)$/s);
   if (!m) return esc(raw);
   const known = T[L]["e_" + m[1]];
-  return esc(known ? (m[1] === "SCAN_FAILED" ? `${known}: ${m[2]}` : known) : raw);
+  return esc(known ? (m[1] === "SCAN_FAILED" || m[1] === "BACKUP_FAILED" ? `${known}: ${m[2]}` : known) : raw);
 }
 const errBox = () => (st.error ? `<div class="err">${errText(st.error)}</div>` : "");
 
@@ -273,10 +289,10 @@ function paintResearch() {
 function researchScreen(m) {
   const back = () => { st.screen = "settings"; render(); };
   if (!rs.sessions.length) {
-    m.innerHTML = `<div class="teambar">🔒 ${t("teamOnly")}</div><h1>${t("res")}</h1>${errBox()}<div class="card"><p class="sub" style="margin:0">${t("resNone")}</p></div><div class="row" style="margin-top:22px"><button class="btn ghost" id="rback">${t("back")}</button></div>`;
+    m.innerHTML = `<h1>${t("res")}</h1>${errBox()}<div class="card"><p class="sub" style="margin:0">${t("resNone")}</p></div><div class="row" style="margin-top:22px"><button class="btn ghost" id="rback">${t("back")}</button></div>`;
     $("#rback").onclick = back; return;
   }
-  m.innerHTML = `<div class="teambar">🔒 ${t("teamOnly")}</div><h1>${t("res")}</h1><p class="sub">${t("resSub")}</p>${errBox()}
+  m.innerHTML = `<h1>${t("res")}</h1><p class="sub">${t("resSub")}</p>${errBox()}
     <div class="row" style="margin-bottom:16px"><label style="margin:0">${t("resSess")}</label><select id="rs_sess" style="width:auto">${rs.sessions.map((x) => `<option ${x.pid == rs.pid ? "selected" : ""}>${esc(x.pid)}</option>`).join("")}</select>
       <div class="seg" style="flex:none">${(rs.sess?.scans ?? []).map((x) => `<button data-sc="${x.side}|${x.round}" class="${rs.cur && rs.cur.side == x.side && rs.cur.round == x.round ? "on" : ""}" style="padding:10px 16px">${x.side == "left" ? "L" : "R"}${x.round}</button>`).join("")}</div></div>
     <div class="grid2"><div class="card"><div class="scanwin" id="rsimg" style="background:#10151f"></div><p class="muted" style="margin:12px 0 0">${t("resPts")}</p>
@@ -403,11 +419,14 @@ async function render() {
 
   if (s === "settings") {
     const c = st.settings;
-    m.innerHTML = `<div class="teambar">🔒 ${t("teamOnly")}</div><h1>${t("set")}</h1><p class="sub">${t("setSub")}</p>${errBox()}<div class="grid2">
+    m.innerHTML = `<h1>${t("set")}</h1>${errBox()}<div class="grid2">
       <div class="card"><label>${t("rnd")}</label><div class="seg"><button class="${c.rounds == 1 ? "on" : ""}" data-r="1">${t("r1")}</button><button class="${c.rounds == 3 ? "on" : ""}" data-r="3">${t("r3")}</button></div><p class="muted" style="margin:8px 0 22px">${t("rndNote")}</p>
         <label>${t("dataf")}</label><div class="row"><input id="s_dir" value="${esc(c.data_dir)}" style="flex:1"><button class="btn ghost" id="s_save" style="padding:12px 18px;font-size:16px">${t("save")}</button></div>
         <label style="margin-top:22px">${t("station")}</label><div class="row"><input id="s_station" value="${esc(c.station)}" maxlength="4" style="flex:1;text-transform:uppercase"><button class="btn ghost" id="s_stsave" style="padding:12px 18px;font-size:16px">${t("save")}</button></div><p class="muted" style="margin:6px 0 0">${t("stationNote")}</p>
-        <label style="margin-top:22px">${t("scanner")}</label><div class="row"><select id="s_dev" style="flex:1"><option value="">${t("auto")}</option>${st.scanners.map((d) => `<option ${c.scanner == d ? "selected" : ""}>${esc(d)}</option>`).join("")}</select><button class="btn ghost" id="s_ref" style="padding:12px 18px;font-size:16px">${t("refresh")}</button></div></div>
+        <label style="margin-top:22px">${t("scanner")}</label><div class="row"><select id="s_dev" style="flex:1"><option value="">${t("auto")}</option>${st.scanners.map((d) => `<option ${c.scanner == d ? "selected" : ""}>${esc(d)}</option>`).join("")}</select><button class="btn ghost" id="s_ref" style="padding:12px 18px;font-size:16px">${t("refresh")}</button></div>
+        <label style="margin-top:22px">${t("bkLabel")}</label><div class="row"><input id="s_bk" value="${esc(c.backup_dir ?? "")}" placeholder="E:\\SmartFoot_Backup" style="flex:1"><button class="btn ghost" id="s_bksave" style="padding:12px 18px;font-size:16px">${t("save")}</button></div>
+        <p class="muted" style="margin:6px 0 10px">${t("bkNote")}</p><div class="row"><span class="chip ${bk?.enabled && bk.reachable && !bk.last_err ? "ok" : "warn"}" id="bkstat" style="font-weight:600">${bkLine()}</span></div>
+        <div class="row" style="margin-top:12px"><button class="btn ghost" id="s_bknow" style="padding:12px 18px;font-size:16px" ${bk?.enabled && bk.reachable ? "" : "disabled"}>${t("bkNow")}</button></div></div>
       <div><div class="card" id="scpanel"></div><div class="card" style="margin-top:18px"><h2 style="font-size:20px;margin-bottom:6px">${t("cal")}</h2><p class="muted">${t("calNote")}</p></div></div></div>
       <div class="row" style="margin-top:22px"><button class="btn ghost" id="back">${t("back")}</button><button class="btn right" id="gores">${t("resBtn")}</button></div>`;
     paintPanel();
@@ -416,6 +435,12 @@ async function render() {
     m.querySelectorAll("[data-r]").forEach((b) => (b.onclick = () => persist({ rounds: Number(b.dataset.r) })));
     $("#s_save").onclick = () => persist({ data_dir: $("#s_dir").value.trim() });
     $("#s_stsave").onclick = () => { st.form.pid = ""; persist({ station: $("#s_station").value }); };
+    $("#s_bksave").onclick = () => persist({ backup_dir: $("#s_bk").value.trim() || null }).then(refreshBk);
+    $("#s_bknow").onclick = async () => {
+      const b = $("#s_bknow"); b.disabled = true; b.textContent = t("bkNowBusy");
+      try { await invoke("backup_now"); st.error = ""; } catch (e) { st.error = e; }
+      await refreshBk();
+    };
     $("#s_dev").onchange = (e) => persist({ scanner: e.target.value || null });
     $("#s_ref").onclick = async () => { try { st.scanners = await invoke("list_scanners"); } catch (e) { st.error = e; } render(); pollScanner(); };
     $("#back").onclick = () => { st.screen = st.prev; st.error = ""; render(); };
@@ -430,7 +455,7 @@ $("#teamBtn").onclick = async () => {
   else {
     if (st.busy) return;
     st.prev = st.screen; st.screen = "settings"; st.error = "";
-    try { st.settings = await invoke("get_settings"); st.scanners = await invoke("list_scanners").catch(() => []); } catch (e) { st.error = e; }
+    try { st.settings = await invoke("get_settings"); try { bk = await invoke("backup_status"); } catch { bk = null; } st.scanners = await invoke("list_scanners").catch(() => []); } catch (e) { st.error = e; }
   }
   render();
 };
