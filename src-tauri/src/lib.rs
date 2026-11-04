@@ -46,6 +46,28 @@ fn choose_device(s: &Settings) -> Result<String, String> {
         .ok_or_else(|| "NOT_FOUND: scanner not found. Check the USB cable and that the scanner is switched on.".to_string())
 }
 
+/// Windows folder picker for the Settings page. `start` is the folder currently typed (if it exists the
+/// dialog opens there). Returns None when the user cancels. Only fills a text box; the usual checks
+/// still run when Save is pressed.
+#[tauri::command]
+async fn pick_folder(app: tauri::AppHandle, start: Option<String>) -> Result<Option<String>, String> {
+    use tauri_plugin_dialog::DialogExt;
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut d = app.dialog().file();
+        if let Some(s) = start.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
+            let mut p = PathBuf::from(s);
+            // walk up to the nearest folder that exists (a not-yet-created folder was typed)
+            while !p.is_dir() && p.pop() {}
+            if p.is_dir() {
+                d = d.set_directory(p);
+            }
+        }
+        Ok(d.blocking_pick_folder().and_then(|f| f.into_path().ok()).map(|p| p.to_string_lossy().to_string()))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 #[tauri::command]
 fn get_settings(app: tauri::AppHandle) -> Result<Settings, String> {
     settings(&app)
@@ -370,8 +392,10 @@ fn finish_session(app: tauri::AppHandle, pid: String) -> Result<(), String> {
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
             get_settings,
+            pick_folder,
             set_settings,
             list_scanners,
             scanner_status,

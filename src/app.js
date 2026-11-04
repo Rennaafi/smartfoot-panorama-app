@@ -35,7 +35,7 @@ const T = {
     e_LOCKED: "Scan tidak bisa dimulai: kunci transportasi scanner (LOCK) kemungkinan masih tertutup. Buka kunci lalu ulangi.",
     e_BUSY: "Scanner sedang sibuk. Tunggu beberapa detik lalu coba lagi.",
     e_DISK_FULL: "Disk penuh. Kosongkan ruang (satu pemindaian butuh sekitar 35 MB) atau ganti folder data di Settings.",
-    savedBtn: "✓ Tersimpan", bkDone: "Perhatian: salinan kedua belum berhasil. Data hanya ada di satu disk sampai folder salinan bisa diakses lagi.",
+    savedBtn: "✓ Tersimpan", browse: "Pilih folder…", bkDone: "Perhatian: salinan kedua belum berhasil. Data hanya ada di satu disk sampai folder salinan bisa diakses lagi.",
     e_BAD_STATION: "Kode laptop harus 1–4 huruf atau angka.", e_SCAN_FAILED: "Pemindaian gagal", e_ID_USED: "ID ini sudah dipakai. Gunakan ID lain.", e_EMPTY_ID: "ID pasien kosong.", e_OP: "Isi inisial operator.",
     retry: "Coba lagi",
     resBtn: "Layar riset →", res: "Layar riset", resSub: "Angka ukuran dari pemindaian. Tanpa label datar/normal/tinggi.",
@@ -91,7 +91,7 @@ const T = {
     e_LOCKED: "The scan could not start: the scanner's transport LOCK switch is probably still closed. Open it and try again.",
     e_BUSY: "The scanner is busy. Wait a few seconds and try again.",
     e_DISK_FULL: "The disk is full. Free some space (one scan needs about 35 MB) or change the data folder in Settings.",
-    savedBtn: "✓ Saved", bkDone: "Warning: the second copy did not succeed. The data exists on one disk only until the backup folder is reachable again.",
+    savedBtn: "✓ Saved", browse: "Choose folder…", bkDone: "Warning: the second copy did not succeed. The data exists on one disk only until the backup folder is reachable again.",
     e_BAD_STATION: "The laptop code needs 1–4 letters or digits.", e_SCAN_FAILED: "Scan failed", e_ID_USED: "This ID is already used. Pick another ID.", e_EMPTY_ID: "The patient ID is empty.", e_OP: "Enter the operator initials.",
     retry: "Try again",
     resBtn: "Research screen →", res: "Research screen", resSub: "Size numbers from the scans. No flat/normal/high label.",
@@ -457,13 +457,14 @@ async function render() {
     const saveBtn = (f, id) => st.flash === f
       ? `<button class="btn ok" id="${id}" style="padding:12px 18px;font-size:16px">${t("savedBtn")}</button>`
       : `<button class="btn ghost" id="${id}" style="padding:12px 18px;font-size:16px" ${FIELDS[f].same(val(f), c) ? "disabled" : ""}>${t("save")}</button>`;
+    const browseBtn = (id) => `<button class="btn ghost" id="${id}" style="padding:12px 18px;font-size:16px">${t("browse")}</button>`;
     const fieldErr = (f) => (st.ferr?.f === f ? `<div class="err" style="margin:8px 0 0">${errText(st.ferr.e)}</div>` : "");
     m.innerHTML = `<h1>${t("set")}</h1>${errBox()}<div class="grid2">
       <div class="card"><label>${t("rnd")}</label><div class="seg"><button class="${c.rounds == 1 ? "on" : ""}" data-r="1">${t("r1")}</button><button class="${c.rounds == 3 ? "on" : ""}" data-r="3">${t("r3")}</button></div><p class="muted" style="margin:8px 0 22px">${t("rndNote")}</p>
-        <label>${t("dataf")}</label><div class="row"><input id="s_dir" value="${esc(val("dir"))}" style="flex:1">${saveBtn("dir", "s_save")}</div>${fieldErr("dir")}
+        <label>${t("dataf")}</label><div class="row"><input id="s_dir" value="${esc(val("dir"))}" style="flex:1">${browseBtn("s_dir_b")}${saveBtn("dir", "s_save")}</div>${fieldErr("dir")}
         <label style="margin-top:22px">${t("station")}</label><div class="row"><input id="s_station" value="${esc(val("station"))}" maxlength="4" style="flex:1;text-transform:uppercase">${saveBtn("station", "s_stsave")}</div>${fieldErr("station")}<p class="muted" style="margin:6px 0 0">${t("stationNote")}</p>
         <label style="margin-top:22px">${t("scanner")}</label><div class="row"><select id="s_dev" style="flex:1"><option value="">${t("auto")}</option>${st.scanners.map((d) => `<option ${c.scanner == d ? "selected" : ""}>${esc(d)}</option>`).join("")}</select><button class="btn ghost" id="s_ref" style="padding:12px 18px;font-size:16px">${t("refresh")}</button></div>
-        <label style="margin-top:22px">${t("bkLabel")}</label><div class="row"><input id="s_bk" value="${esc(val("bk"))}" placeholder="E:\\SmartFoot_Backup" style="flex:1">${saveBtn("bk", "s_bksave")}</div>${fieldErr("bk")}
+        <label style="margin-top:22px">${t("bkLabel")}</label><div class="row"><input id="s_bk" value="${esc(val("bk"))}" placeholder="E:\\SmartFoot_Backup" style="flex:1">${browseBtn("s_bk_b")}${saveBtn("bk", "s_bksave")}</div>${fieldErr("bk")}
         <p class="muted" style="margin:6px 0 10px">${t("bkNote")}</p><div class="row"><span class="chip ${bk?.enabled && bk.reachable && !bk.last_err ? "ok" : "warn"}" id="bkstat" style="font-weight:600">${bkLine()}</span></div>
         <div class="row" style="margin-top:12px"><button class="btn ghost" id="s_bknow" style="padding:12px 18px;font-size:16px" ${bk?.enabled && bk.reachable ? "" : "disabled"}>${t("bkNow")}</button></div></div>
       <div><div class="card" id="scpanel"></div><div class="card" style="margin-top:18px"><h2 style="font-size:20px;margin-bottom:6px">${t("cal")}</h2><p class="muted">${t("calNote")}</p></div></div></div>
@@ -479,6 +480,15 @@ async function render() {
       } catch (e) { if (f) st.ferr = { f, e }; else st.error = e; }
       render();
     };
+    // folder picker: only fills the text box, Save still does the checks
+    [["s_dir", "s_dir_b"], ["s_bk", "s_bk_b"]].forEach(([inp, btn]) => {
+      $("#" + btn).onclick = async () => {
+        let picked = null;
+        try { picked = await invoke("pick_folder", { start: $("#" + inp).value }); } catch (e) { st.error = e; render(); return; }
+        if (!picked) return; // cancelled
+        const el = $("#" + inp); el.value = picked; el.dispatchEvent(new Event("input"));
+      };
+    });
     Object.entries({ dir: "s_dir", station: "s_station", bk: "s_bk" }).forEach(([f, id]) => {
       $("#" + id).oninput = (e) => {
         st.draft[f] = e.target.value; st.flash = null; st.ferr = null;
