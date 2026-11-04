@@ -41,7 +41,26 @@ fn main() {
             }
             Err(e) => eprintln!("error: {e}"),
         },
-        Some("measure") if a.len() == 2 => match measure::measure_scan(Path::new(&a[1]), &measure::Scale::nominal(300.0), None) {
+        // Developer diagnostics: the numbers behind the foot/no-foot decision for one or more scans.
+        Some("diag") if a.len() >= 2 => {
+            println!("{:<30} {:>4} {:>6} {:>6} {:>6} {:>6} {:>5} {:>5} {:>5}", "scan", "thr", "fg", "bg", "area%", "extra", "found", "odd", "edge");
+            for p in &a[1..] {
+                let full = image::open(p).expect("open").to_rgb8();
+                let img = image::imageops::resize(&full, full.width() / 4, full.height() / 4, image::imageops::FilterType::Triangle);
+                let s = analyze::segment(&img, 4);
+                let (mut fs, mut fnn, mut bs, mut bn) = (0f64, 0f64, 0f64, 0f64);
+                for i in 0..s.mask.len() {
+                    if s.mask[i] { fs += s.score[i] as f64; fnn += 1.0 } else { bs += s.score[i] as f64; bn += 1.0 }
+                }
+                let r = analyze::analyze_image(&img);
+                let name = Path::new(p).file_stem().unwrap().to_string_lossy();
+                println!(
+                    "{:<30} {:>4} {:>6.1} {:>6.1} {:>6.1} {:>6.2} {:>5} {:>5} {:>5}",
+                    name, s.thr, fs / fnn.max(1.0), bs / bn.max(1.0), r.area_frac * 100.0, s.extra_frac, r.found, r.odd_shape, r.touches_edge
+                );
+            }
+        }
+        Some("measure") if a.len() == 2 =>match measure::measure_scan(Path::new(&a[1]), &measure::Scale::nominal(300.0), None) {
             Ok(m) => println!("{}", serde_json::to_string_pretty(&m).unwrap()),
             Err(e) => eprintln!("error: {e}"),
         },

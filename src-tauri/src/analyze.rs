@@ -32,6 +32,9 @@ const DOWN: u32 = 4;
 const LIMB_MAX_MM: f32 = 80.0;
 /// Pixels above this fraction of the Otsu threshold count as foot when connected to a strong pixel.
 const WEAK_FRAC: f32 = 0.55;
+/// Smallest mean score (colour distance 0-255) inside the outlined object. Provisional: empty glass
+/// 5-8 (the Otsu threshold once crossed 8), hand 122, packet 199. Re-check on real feet in stage 2.
+const MIN_CONTRAST: f64 = 35.0;
 const STRIP: u32 = 20; // rows used for the background estimate (preview pixels)
 /// Smallest scan (full-resolution pixels per side) worth analysing; anything smaller is a broken scan.
 pub const MIN_SCAN_PX: u32 = 160;
@@ -147,7 +150,23 @@ pub fn segment(img: &RgbImage, down: u32) -> Seg {
     // only small holes (< 2 cm^2) are filled; a big pocket between toes must stay open
     let max_hole_px = (200.0 / (down.max(1) as f32 * 25.4 / 300.0).powi(2)) as usize;
     mask = fill_holes(&mask, wu, hu, max_hole_px);
+    // Nothing contrasty enough on the glass: return an EMPTY mask, so that the review screen and the
+    // measurement code (which both start from this mask) agree that there is no foot.
+    let (inside, n_in) = mask.iter().zip(&score).fold((0f64, 0f64), |(s, n), (&m, &v)| if m { (s + v as f64, n + 1.0) } else { (s, n) });
+    if !real_object(inside / n_in.max(1.0)) {
+        mask.iter_mut().for_each(|m| *m = false);
+    }
     Seg { mask, score, thr, w, h, extra_frac }
+}
+
+/// Is the "object" strong enough to be a real object on the glass?
+/// An empty glass still gives Otsu something to split (a faint left-to-right fade plus noise), so a
+/// foot needs real contrast: the mean colour distance from the background inside the outlined area.
+/// Measured 2026-11-03 on the LiDE 300 (lid open, nothing on the glass): 5-8; a hand 122, a packet 199.
+/// NOT the Otsu threshold itself: with a clean two-group image Otsu may sit anywhere in the gap
+/// (10 for a synthetic foot whose pixels all score 125), so it says nothing about contrast.
+fn real_object(mean_score_inside: f64) -> bool {
+    mean_score_inside >= MIN_CONTRAST
 }
 
 pub fn analyze_image(img: &RgbImage) -> Analysis {
@@ -156,7 +175,19 @@ pub fn analyze_image(img: &RgbImage) -> Analysis {
 
     let count = mask.iter().filter(|&&m| m).count();
     let area_frac = count as f32 / (wu * hu) as f32;
-    let found = thr >= 8 && area_frac > 0.02 && area_frac < 0.85;
+    // mean score inside and outside the mask: how strongly the "object" differs from the background
+    let (mut fs, mut fn_, mut bs, mut bn) = (0f64, 0f64, 0f64, 0f64);
+    for i in 0..wu * hu {
+        if mask[i] {
+            fs += score[i] as f64;
+            fn_ += 1.0;
+        } else {
+            bs += score[i] as f64;
+            bn += 1.0;
+        }
+    }
+    let (fm, bm) = (fs / fn_.max(1.0), bs / bn.max(1.0));
+    let found = thr >= 8 && real_object(fm) && area_frac > 0.02 && area_frac < 0.85;
 
     // 5. edge contact and separation quality
     // contact with each edge: pixel count and the stretch it covers (left, right, top, bottom)
@@ -186,18 +217,7 @@ pub fn analyze_image(img: &RgbImage) -> Analysis {
     let narrow_single = touched.len() == 1 && ((hi[touched[0]] - lo[touched[0]]) as f32 / px_per_mm) <= LIMB_MAX_MM;
     let touches_edge = !touched.is_empty() && !narrow_single;
     let limb_at_edge = narrow_single;
-    let (mut fs, mut fn_, mut bs, mut bn) = (0f64, 0f64, 0f64, 0f64);
-    for i in 0..wu * hu {
-        if mask[i] {
-            fs += score[i] as f64;
-            fn_ += 1.0;
-        } else {
-            bs += score[i] as f64;
-            bn += 1.0;
-        }
-    }
-    let (fm, bm) = (fs / fn_.max(1.0), bs / bn.max(1.0));
-    let clear = found && fm >= 1.8 * thr as f64 && bm <= 0.6 * thr as f64;
+    let clear =found && fm >= 1.8 * thr as f64 && bm <= 0.6 * thr as f64;
 
     // shape sanity: principal axes of the mask. A foot is about 2.2-3.2 times longer than wide (by
     // spread) and 150-330 mm long; a ruler, card or speck is far outside that.
@@ -223,9 +243,10 @@ pub fn analyze_image(img: &RgbImage) -> Analysis {
 
     // 6. preview with the outline drawn in blue
     let mut prev = img.clone();
+    // no foot found = no outline (F2): stray squiggles over an empty glass only confuse the nurse
     for y in 1..hu - 1 {
         for x in 1..wu - 1 {
-            if mask[y * wu + x] && !(mask[y * wu + x - 1] && mask[y * wu + x + 1] && mask[(y - 1) * wu + x] && mask[(y + 1) * wu + x]) {
+            if found && mask[y * wu + x] && !(mask[y * wu + x - 1] && mask[y * wu + x + 1] && mask[(y - 1) * wu + x] && mask[(y + 1) * wu + x]) {
                 for (dx, dy) in [(0i32, 0i32), (1, 0), (0, 1), (1, 1)] {
                     let (px, py) = ((x as i32 + dx) as u32, (y as i32 + dy) as u32);
                     if px < w && py < h {

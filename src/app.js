@@ -34,6 +34,8 @@ const T = {
     e_NOT_FOUND: "Scanner tidak ditemukan. Periksa kabel USB dan pastikan scanner menyala.",
     e_LOCKED: "Scan tidak bisa dimulai: kunci transportasi scanner (LOCK) kemungkinan masih tertutup. Buka kunci lalu ulangi.",
     e_BUSY: "Scanner sedang sibuk. Tunggu beberapa detik lalu coba lagi.",
+    e_DISK_FULL: "Disk penuh. Kosongkan ruang (satu pemindaian butuh sekitar 35 MB) atau ganti folder data di Settings.",
+    savedBtn: "✓ Tersimpan", bkDone: "Perhatian: salinan kedua belum berhasil. Data hanya ada di satu disk sampai folder salinan bisa diakses lagi.",
     e_BAD_STATION: "Kode laptop harus 1–4 huruf atau angka.", e_SCAN_FAILED: "Pemindaian gagal", e_ID_USED: "ID ini sudah dipakai. Gunakan ID lain.", e_EMPTY_ID: "ID pasien kosong.", e_OP: "Isi inisial operator.",
     retry: "Coba lagi",
     resBtn: "Layar riset →", res: "Layar riset", resSub: "Angka ukuran dari pemindaian. Tanpa label datar/normal/tinggi.",
@@ -88,6 +90,8 @@ const T = {
     e_NOT_FOUND: "Scanner not found. Check the USB cable and that the scanner is switched on.",
     e_LOCKED: "The scan could not start: the scanner's transport LOCK switch is probably still closed. Open it and try again.",
     e_BUSY: "The scanner is busy. Wait a few seconds and try again.",
+    e_DISK_FULL: "The disk is full. Free some space (one scan needs about 35 MB) or change the data folder in Settings.",
+    savedBtn: "✓ Saved", bkDone: "Warning: the second copy did not succeed. The data exists on one disk only until the backup folder is reachable again.",
     e_BAD_STATION: "The laptop code needs 1–4 letters or digits.", e_SCAN_FAILED: "Scan failed", e_ID_USED: "This ID is already used. Pick another ID.", e_EMPTY_ID: "The patient ID is empty.", e_OP: "Enter the operator initials.",
     retry: "Try again",
     resBtn: "Research screen →", res: "Research screen", resSub: "Size numbers from the scans. No flat/normal/high label.",
@@ -202,10 +206,17 @@ async function runScannerTest() {
 async function refreshBk() { try { bk = await invoke("backup_status"); } catch { bk = null; } render(); }
 function noteScanError(e) { if (String(e).startsWith("LOCKED")) { sc.lock = true; paintChip(); } }
 
-const st = { screen: "start", prev: "start", form: { pid: "", op: "", age: "", sex: "f", note: "" }, sess: null, idx: 0, scan: null, error: "", busy: false, settings: null, scanners: [], unfinished: undefined, damaged: [] };
+const st = { screen: "start", prev: "start", form: { pid: "", op: "", age: "", sex: "f", note: "" }, sess: null, idx: 0, scan: null, error: "", busy: false, settings: null, draft: {}, flash: null, ferr: null, scanners: [], unfinished: undefined, damaged: [] };
+// text fields in Settings with their own Save button: current value and "unchanged" test
+const FIELDS = {
+  dir: { get: (c) => c.data_dir, same: (v, c) => v.trim() === c.data_dir },
+  station: { get: (c) => c.station, same: (v, c) => v.trim().toUpperCase() === c.station },
+  bk: { get: (c) => c.backup_dir ?? "", same: (v, c) => v.trim() === (c.backup_dir ?? "") },
+};
 const STEP = { start: 0, scan: 1, review: 2, done: 3 };
 
 function errText(raw) {
+  if (/not enough space|disk is full|os error 112/i.test(String(raw))) return esc(t("e_DISK_FULL"));
   const m = String(raw).match(/^([A-Z_]+):\s*(.*)$/s);
   if (!m) return esc(raw);
   const known = T[L]["e_" + m[1]];
@@ -424,7 +435,7 @@ async function render() {
       try {
         await invoke("accept_scan", { pid: st.sess.pid, side, round: r, seconds: sc.seconds, widthPx: sc.width_px, heightPx: sc.height_px, warnings: w });
         if (st.idx < st.sess.seq.length - 1) { st.idx++; st.screen = "scan"; }
-        else { await invoke("finish_session", { pid: st.sess.pid }); st.screen = "done"; }
+        else { await invoke("finish_session", { pid: st.sess.pid }); st.screen = "done"; try { bk = await invoke("backup_status"); } catch { bk = null; } }
         st.scan = null; st.error = "";
       } catch (e) { st.error = e; }
       render();
@@ -432,7 +443,8 @@ async function render() {
   }
 
   if (s === "done") {
-    m.innerHTML = `<h1>${t("done")}</h1><p class="sub">${t("doneSub")}</p><div class="card"><div class="row" style="gap:30px"><div class="big" style="color:var(--ok)">✓</div><div><div style="font-size:22px;font-weight:700">${esc(st.sess.pid)} · ${st.sess.seq.length} ${t("scans")}</div><div class="sub" style="margin:4px 0 0">${t("saved")} ${esc(st.sess.dir)}</div></div></div>
+    const bkBad = bk?.enabled && (!bk.reachable || bk.last_err) ? `<div class="warn">${t("bkDone")}<br>${bkLine()}</div>` : "";
+    m.innerHTML = `<h1>${t("done")}</h1><p class="sub">${t("doneSub")}</p>${bkBad}<div class="card"><div class="row" style="gap:30px"><div class="big" style="color:var(--ok)">✓</div><div><div style="font-size:22px;font-weight:700">${esc(st.sess.pid)} · ${st.sess.seq.length} ${t("scans")}</div><div class="sub" style="margin:4px 0 0">${t("saved")} ${esc(st.sess.dir)}</div></div></div>
       <div class="row" style="margin-top:26px"><button class="btn right" id="new">${t("newS")}</button></div></div>`;
     $("#new").onclick = () => { st.form = { pid: "", op: st.form.op, age: "", sex: "f", note: "" }; st.sess = null; st.screen = "start"; render(); };
   }
@@ -441,23 +453,44 @@ async function render() {
 
   if (s === "settings") {
     const c = st.settings;
+    const val = (f) => st.draft[f] ?? FIELDS[f].get(c);
+    const saveBtn = (f, id) => st.flash === f
+      ? `<button class="btn ok" id="${id}" style="padding:12px 18px;font-size:16px">${t("savedBtn")}</button>`
+      : `<button class="btn ghost" id="${id}" style="padding:12px 18px;font-size:16px" ${FIELDS[f].same(val(f), c) ? "disabled" : ""}>${t("save")}</button>`;
+    const fieldErr = (f) => (st.ferr?.f === f ? `<div class="err" style="margin:8px 0 0">${errText(st.ferr.e)}</div>` : "");
     m.innerHTML = `<h1>${t("set")}</h1>${errBox()}<div class="grid2">
       <div class="card"><label>${t("rnd")}</label><div class="seg"><button class="${c.rounds == 1 ? "on" : ""}" data-r="1">${t("r1")}</button><button class="${c.rounds == 3 ? "on" : ""}" data-r="3">${t("r3")}</button></div><p class="muted" style="margin:8px 0 22px">${t("rndNote")}</p>
-        <label>${t("dataf")}</label><div class="row"><input id="s_dir" value="${esc(c.data_dir)}" style="flex:1"><button class="btn ghost" id="s_save" style="padding:12px 18px;font-size:16px">${t("save")}</button></div>
-        <label style="margin-top:22px">${t("station")}</label><div class="row"><input id="s_station" value="${esc(c.station)}" maxlength="4" style="flex:1;text-transform:uppercase"><button class="btn ghost" id="s_stsave" style="padding:12px 18px;font-size:16px">${t("save")}</button></div><p class="muted" style="margin:6px 0 0">${t("stationNote")}</p>
+        <label>${t("dataf")}</label><div class="row"><input id="s_dir" value="${esc(val("dir"))}" style="flex:1">${saveBtn("dir", "s_save")}</div>${fieldErr("dir")}
+        <label style="margin-top:22px">${t("station")}</label><div class="row"><input id="s_station" value="${esc(val("station"))}" maxlength="4" style="flex:1;text-transform:uppercase">${saveBtn("station", "s_stsave")}</div>${fieldErr("station")}<p class="muted" style="margin:6px 0 0">${t("stationNote")}</p>
         <label style="margin-top:22px">${t("scanner")}</label><div class="row"><select id="s_dev" style="flex:1"><option value="">${t("auto")}</option>${st.scanners.map((d) => `<option ${c.scanner == d ? "selected" : ""}>${esc(d)}</option>`).join("")}</select><button class="btn ghost" id="s_ref" style="padding:12px 18px;font-size:16px">${t("refresh")}</button></div>
-        <label style="margin-top:22px">${t("bkLabel")}</label><div class="row"><input id="s_bk" value="${esc(c.backup_dir ?? "")}" placeholder="E:\\SmartFoot_Backup" style="flex:1"><button class="btn ghost" id="s_bksave" style="padding:12px 18px;font-size:16px">${t("save")}</button></div>
+        <label style="margin-top:22px">${t("bkLabel")}</label><div class="row"><input id="s_bk" value="${esc(val("bk"))}" placeholder="E:\\SmartFoot_Backup" style="flex:1">${saveBtn("bk", "s_bksave")}</div>${fieldErr("bk")}
         <p class="muted" style="margin:6px 0 10px">${t("bkNote")}</p><div class="row"><span class="chip ${bk?.enabled && bk.reachable && !bk.last_err ? "ok" : "warn"}" id="bkstat" style="font-weight:600">${bkLine()}</span></div>
         <div class="row" style="margin-top:12px"><button class="btn ghost" id="s_bknow" style="padding:12px 18px;font-size:16px" ${bk?.enabled && bk.reachable ? "" : "disabled"}>${t("bkNow")}</button></div></div>
       <div><div class="card" id="scpanel"></div><div class="card" style="margin-top:18px"><h2 style="font-size:20px;margin-bottom:6px">${t("cal")}</h2><p class="muted">${t("calNote")}</p></div></div></div>
       <div class="row" style="margin-top:22px"><button class="btn ghost" id="back">${t("back")}</button><button class="btn right" id="gores">${t("resBtn")}</button></div>`;
     paintPanel();
     $("#gores").onclick = openResearch;
-    const persist = async (patch) => { try { st.settings = await invoke("set_settings", { new: { ...st.settings, ...patch } }); st.error = ""; } catch (e) { st.error = e; } render(); };
+    // f = the text field being saved: feedback shows next to it ("✓ Tersimpan" or a red line)
+    const persist = async (patch, f) => {
+      st.ferr = null;
+      try {
+        st.settings = await invoke("set_settings", { new: { ...st.settings, ...patch } }); st.error = "";
+        if (f) { delete st.draft[f]; st.flash = f; setTimeout(() => { if (st.flash === f) { st.flash = null; if (st.screen === "settings") render(); } }, 2200); }
+      } catch (e) { if (f) st.ferr = { f, e }; else st.error = e; }
+      render();
+    };
+    Object.entries({ dir: "s_dir", station: "s_station", bk: "s_bk" }).forEach(([f, id]) => {
+      $("#" + id).oninput = (e) => {
+        st.draft[f] = e.target.value; st.flash = null; st.ferr = null;
+        const b = $("#" + { dir: "s_save", station: "s_stsave", bk: "s_bksave" }[f]);
+        b.className = "btn ghost"; b.textContent = t("save"); b.toggleAttribute("disabled", FIELDS[f].same(e.target.value, st.settings));
+        e.target.closest(".card").querySelectorAll(".err").forEach((x) => x.remove());
+      };
+    });
     m.querySelectorAll("[data-r]").forEach((b) => (b.onclick = () => persist({ rounds: Number(b.dataset.r) })));
-    $("#s_save").onclick = () => persist({ data_dir: $("#s_dir").value.trim() });
-    $("#s_stsave").onclick = () => { st.form.pid = ""; persist({ station: $("#s_station").value }); };
-    $("#s_bksave").onclick = () => persist({ backup_dir: $("#s_bk").value.trim() || null }).then(refreshBk);
+    $("#s_save").onclick = () => persist({ data_dir: $("#s_dir").value.trim() }, "dir");
+    $("#s_stsave").onclick = () => { st.form.pid = ""; persist({ station: $("#s_station").value }, "station"); };
+    $("#s_bksave").onclick = () => persist({ backup_dir: $("#s_bk").value.trim() || null }, "bk").then(refreshBk);
     $("#s_bknow").onclick = async () => {
       const b = $("#s_bknow"); b.disabled = true; b.textContent = t("bkNowBusy");
       try { await invoke("backup_now"); st.error = ""; } catch (e) { st.error = e; }
@@ -465,7 +498,7 @@ async function render() {
     };
     $("#s_dev").onchange = (e) => persist({ scanner: e.target.value || null });
     $("#s_ref").onclick = async () => { try { st.scanners = await invoke("list_scanners"); } catch (e) { st.error = e; } render(); pollScanner(); };
-    $("#back").onclick = () => { st.screen = st.prev; st.error = ""; render(); };
+    $("#back").onclick = () => { st.screen = st.prev; st.error = ""; st.draft = {}; st.ferr = null; st.flash = null; render(); };
   }
   italicize($("aside")); italicize(m); paintChip();
 }
@@ -476,7 +509,7 @@ $("#teamBtn").onclick = async () => {
   if (st.screen === "settings") { st.screen = st.prev; }
   else {
     if (st.busy) return;
-    st.prev = st.screen; st.screen = "settings"; st.error = "";
+    st.prev = st.screen; st.screen = "settings"; st.error = ""; st.draft = {}; st.ferr = null; st.flash = null;
     try { st.settings = await invoke("get_settings"); try { bk = await invoke("backup_status"); } catch { bk = null; } st.scanners = await invoke("list_scanners").catch(() => []); } catch (e) { st.error = e; }
   }
   render();

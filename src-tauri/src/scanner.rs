@@ -210,7 +210,7 @@ try {{
         w = w,
         h = h,
     );
-    let text = powershell(&script).map_err(|e| friendly(&e))?;
+    let text = powershell(&script).map_err(|e| friendly_for(&e, device))?;
     let secs = text
         .lines()
         .find_map(|l| l.strip_prefix("OK|"))
@@ -238,13 +238,32 @@ fn check_image(path: &Path) -> Result<(u32, u32), String> {
     Ok((w, h))
 }
 
-/// Turn raw PowerShell/WIA errors into short messages the UI can show.
+/// Like `friendly`, but for the vague "driver threw an exception" it first asks Windows whether the
+/// scanner is still listed: a pulled USB cable gives the same error as a closed LOCK switch
+/// (found 2026-11-03, F3), and only the device list tells them apart.
+fn friendly_for(raw: &str, device: &str) -> String {
+    let still_listed = if raw.contains("driver threw an exception") {
+        list_scanners().map(|l| l.iter().any(|d| d == device)).unwrap_or(true)
+    } else {
+        true
+    };
+    friendly_with(raw, still_listed)
+}
+
 fn friendly(raw: &str) -> String {
+    friendly_with(raw, true)
+}
+
+/// Turn raw PowerShell/WIA errors into short messages the UI can show.
+fn friendly_with(raw: &str, still_listed: bool) -> String {
     let r = raw.trim_start_matches("ERR|");
+    let low = r.to_lowercase();
     if r.starts_with("TIMEOUT") {
         r.to_string()
-    } else if r.contains("scanner not found") {
+    } else if r.contains("scanner not found") || (r.contains("driver threw an exception") && !still_listed) {
         "NOT_FOUND: scanner not found. Check the USB cable and that the scanner is switched on.".into()
+    } else if low.contains("not enough space") || low.contains("disk is full") || low.contains("os error 112") {
+        "DISK_FULL: the disk is full. A scan needs about 35 MB free.".into()
     } else if r.contains("driver threw an exception") {
         // measured 2026-11-03 on the LiDE 300 driverless route: LOCK closed -> this error,
         // LOCK open -> the same scan succeeds. (The Canon IJ route returns a blank image instead.)
@@ -275,6 +294,20 @@ mod tests {
         let big = powershell_with_limit("1..20000 | ForEach-Object { 'line ' + $_ }", Duration::from_secs(30)).unwrap();
         assert!(big.lines().count() >= 20000);
         assert!(friendly("TIMEOUT: x").starts_with("TIMEOUT"));
+    }
+
+    #[test]
+    fn unplugged_scanner_is_not_reported_as_a_closed_lock() {
+        let raw = "ERR|Exception calling \"Transfer\": The device's driver threw an exception";
+        // still listed by Windows: the LOCK switch is the likely cause
+        assert!(friendly_with(raw, true).starts_with("LOCKED"));
+        // gone from the device list: the cable is the cause
+        assert!(friendly_with(raw, false).starts_with("NOT_FOUND"));
+        // the driver text without a device-list answer keeps the old behaviour
+        assert!(friendly(raw).starts_with("LOCKED"));
+        // a full disk gets its own code, not the raw Windows sentence
+        assert!(friendly("ERR|There is not enough space on the disk.").starts_with("DISK_FULL"));
+        assert!(friendly("ERR|Something else").starts_with("SCAN_FAILED"));
     }
 
     #[test]

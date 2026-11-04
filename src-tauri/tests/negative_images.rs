@@ -47,6 +47,18 @@ fn cases() -> Vec<Case> {
             img: RgbImage::from_fn(W, H, |x, y| { let g = (60 + (x * 120 / W) as i32 + ((y * 7 + x * 3) % 9) as i32) as u8; Rgb([g, g, g]) }),
             expect_found: Some(false),
         },
+        // F1, measured on the real LiDE 300 on 2026-11-03: empty glass has a stable left-to-right fade
+        // (about 17-24 grey levels) plus a slow top-to-bottom drift. Two harsher variants than reality.
+        Case {
+            name: "empty glass, real-like fade 24 levels",
+            img: RgbImage::from_fn(W, H, |x, y| { let g = (95 + 24 - (x * 24 / W) as i32 + (y * 8 / H) as i32 + ((y * 7 + x * 3) % 5) as i32) as u8; Rgb([g, g, g.saturating_add(4)]) }),
+            expect_found: Some(false),
+        },
+        Case {
+            name: "empty glass, harsh fade 40 levels",
+            img: RgbImage::from_fn(W, H, |x, y| { let g = (90 + 40 - (x * 40 / W) as i32 + (y * 12 / H) as i32 + ((y * 7 + x * 3) % 7) as i32) as u8; Rgb([g, g, g.saturating_add(5)]) }),
+            expect_found: Some(false),
+        },
         Case {
             name: "pure random noise",
             img: { let mut s = 12345u32; RgbImage::from_fn(W, H, |_, _| { s = s.wrapping_mul(1664525).wrapping_add(1013904223); let b = (s >> 24) as u8; Rgb([b, b.wrapping_add(31), b.wrapping_mul(3)]) }) },
