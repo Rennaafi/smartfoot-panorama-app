@@ -58,7 +58,7 @@ fn main() {
                 );
             }
         }
-        Some("measure") if a.len() == 2 =>match measure::measure_scan(Path::new(&a[1]), &measure::Scale::nominal(300.0), None) {
+        Some("measure") if a.len() == 2 => match measure::measure_scan(Path::new(&a[1]), &measure::Scale::calibrated(), None) {
             Ok(m) => println!("{}", serde_json::to_string_pretty(&m).unwrap()),
             Err(e) => eprintln!("error: {e}"),
         },

@@ -10,8 +10,8 @@
 //!  * The toeless length is cut into thirds: hindfoot A, midfoot B, forefoot C. AI = B / (A + B + C).
 //!  * Chippaux-Smirak index = narrowest midfoot width / widest forefoot width x 100.
 //!
-//! Everything is computed in millimetres from the pixel size in `Scale`. Until the calibration tool
-//! exists the scale is the nominal scanner resolution and `calibrated` is false.
+//! Everything is computed in millimetres from the pixel size in `Scale`. Sessions use
+//! `Scale::calibrated()`, measured with steel and plastic rulers on the final case on 13 Nov 2026.
 
 use image::imageops::FilterType;
 use serde::{Deserialize, Serialize};
@@ -30,10 +30,36 @@ pub struct Scale {
     pub calibrated: bool,
 }
 
+/// Ruler calibration of the LiDE 300 in the final case (10 mm acrylic, scanner on its spacer),
+/// 13 Nov 2026. Scan direction: 1 mm tick pitch of a steel and a plastic ruler (mm and inch scales,
+/// lengthwise, lights off and on, under white cloth and beside a foot) = 11.83-11.84 px/mm, 300.7 dpi.
+/// Sensor direction: inch marks of the steel ruler laid across (1 mm ticks are blurred out
+/// there), best band 299.5 dpi, matching the 29 Oct ID-card check (299.3 dpi).
+pub const CAL_DPI_SCAN: f32 = 300.7;
+pub const CAL_DPI_SENSOR: f32 = 299.5;
+pub const CAL_DATE: &str = "2026-11-13";
+
 impl Scale {
     pub fn nominal(dpi: f32) -> Self {
         Scale { x_mm_per_px: 25.4 / dpi, y_mm_per_px: 25.4 / dpi, calibrated: false }
     }
+    /// The ruler calibration above (x = sensor direction, y = scan direction).
+    pub fn calibrated() -> Self {
+        Scale { x_mm_per_px: 25.4 / CAL_DPI_SENSOR, y_mm_per_px: 25.4 / CAL_DPI_SCAN, calibrated: true }
+    }
+}
+
+/// What is written into every new session file, so each session records the scale it used.
+pub fn calibration_record() -> serde_json::Value {
+    let s = Scale::calibrated();
+    serde_json::json!({
+        "date": CAL_DATE,
+        "x_mm_per_px": s.x_mm_per_px,
+        "y_mm_per_px": s.y_mm_per_px,
+        "dpi_sensor_axis": CAL_DPI_SENSOR,
+        "dpi_scan_axis": CAL_DPI_SCAN,
+        "method": "steel + plastic ruler tick pitch on the acrylic (scan axis), steel ruler inch marks (sensor axis)",
+    })
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -55,6 +81,9 @@ pub struct Measurements {
     pub heel_centre: [f32; 2],
     pub toe_tip: [f32; 2],
     pub heel_end: [f32; 2],
+    /// Both ends of the widest cut (foot width), full-resolution pixels. Zero in older session files.
+    #[serde(default)]
+    pub fw_line: [[f32; 2]; 2],
     pub toe_base: [f32; 2],
     /// True when a team member moved heel centre / toe tip by hand.
     pub corrected: bool,
@@ -205,6 +234,15 @@ pub fn measure_mask(mask: &[bool], w: usize, h: usize, scale: &Scale, down: f32,
     let csi = if fore_max > 0.0 && mid_min < f32::MAX { 100.0 * mid_min / fore_max } else { 0.0 };
 
     let back = |q: P| [q[0] / scale.x_mm_per_px, q[1] / scale.y_mm_per_px];
+    // where the foot is widest, for drawing the width arrow (slices are sorted above)
+    let kw = ws.iter().enumerate().fold((0, f32::MIN), |m, (i, &v)| if v > m.1 { (i, v) } else { m }).0;
+    let fw_line = match slices.get(kw) {
+        Some(sl) if !sl.is_empty() => {
+            let tw = t_min + kw as f32 + 0.5;
+            [back(add(add(hc, a, tw), b, sl[0])), back(add(add(hc, a, tw), b, sl[sl.len() - 1]))]
+        }
+        _ => [[0.0; 2]; 2],
+    };
     Some(Measurements {
         scale: scale.clone(),
         fl_mm: fl,
@@ -222,6 +260,7 @@ pub fn measure_mask(mask: &[bool], w: usize, h: usize, scale: &Scale, down: f32,
         toe_tip: back(tip),
         heel_end: back(add(hc, a, t_min)),
         toe_base: back(add(hc, a, t_base)),
+        fw_line,
         corrected: pts.is_some(),
     })
 }
@@ -352,6 +391,27 @@ mod tests {
         let b = measure_mask(&mask, w, h, &Scale { x_mm_per_px: 0.255, y_mm_per_px: 0.25, calibrated: true }, 1.0, None).unwrap();
         assert!((a.ai - b.ai).abs() < 0.02);
         assert!(b.scale.calibrated && b.area_cm2 > a.area_cm2 * 1.015);
+    }
+
+    #[test]
+    fn width_line_is_as_long_as_the_foot_width() {
+        // the review screen draws the width arrow from fw_line, so it must match fw_mm
+        let sc = Scale { x_mm_per_px: 0.25, y_mm_per_px: 0.25, calibrated: false };
+        for deg in [0.0, 30.0, 100.0] {
+            let (mask, w, h, _) = make(deg, false);
+            let m = measure_mask(&mask, w, h, &sc, 1.0, None).unwrap();
+            let [p, q] = m.fw_line;
+            let len = ((q[0] - p[0]).powi(2) + (q[1] - p[1]).powi(2)).sqrt() * 0.25;
+            assert!((len - m.fw_mm).abs() < 0.04 * m.fw_mm, "rot {deg}: line {len} vs fw {}", m.fw_mm);
+        }
+    }
+
+    #[test]
+    fn calibrated_scale_is_the_ruler_result() {
+        let s = Scale::calibrated();
+        assert!(s.calibrated);
+        assert!((25.4 / s.y_mm_per_px - 300.7).abs() < 0.01 && (25.4 / s.x_mm_per_px - 299.5).abs() < 0.01);
+        assert_eq!(calibration_record()["date"], "2026-11-13");
     }
 
     #[test]

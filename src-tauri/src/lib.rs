@@ -128,6 +128,26 @@ async fn backup_now(app: tauri::AppHandle) -> Result<usize, String> {
     .map_err(|e| e.to_string())?
 }
 
+/// Where scans are saved and whether that place can be used right now (shown on the start screen).
+#[derive(Serialize)]
+struct DataDirStatus {
+    path: String,
+    /// The folder exists, or its drive exists so the folder can be created on the first save.
+    ok: bool,
+}
+
+pub fn dir_usable(p: &std::path::Path) -> bool {
+    // "E:\hasil smartfoot" on a flash disk that was pulled out: the drive root E:\ is gone
+    let root: PathBuf = p.components().take(2).collect();
+    p.is_dir() || (p.is_absolute() && root.is_dir())
+}
+
+#[tauri::command]
+fn data_dir_status(app: tauri::AppHandle) -> Result<DataDirStatus, String> {
+    let d = data_dir(&app)?;
+    Ok(DataDirStatus { ok: dir_usable(&d), path: d.to_string_lossy().into() })
+}
+
 #[tauri::command]
 fn new_session_id(app: tauri::AppHandle) -> Result<String, String> {
     let s = settings(&app)?;
@@ -160,6 +180,9 @@ async fn start_session(app: tauri::AppHandle, pid: String, operator: String, age
 #[derive(Serialize)]
 struct ScanOutcome {
     preview: String, // PNG data URL, outline drawn on
+    plain: String,   // same image without the outline
+    preview_w: u32,
+    preview_h: u32,
     seconds: f64,
     width_px: u32,
     height_px: u32,
@@ -167,6 +190,8 @@ struct ScanOutcome {
     touches_edge: bool,
     area_pct: f32,
     warnings: Vec<String>,
+    /// Shown on the review screen; None when no foot could be measured.
+    measurements: Option<measure::Measurements>,
 }
 
 fn outcome_from(path: &std::path::Path, seconds: f64, width_px: u32, height_px: u32) -> Result<ScanOutcome, String> {
@@ -185,8 +210,14 @@ fn outcome_from(path: &std::path::Path, seconds: f64, width_px: u32, height_px: 
     if a.extra_objects {
         warnings.push("TWO_OBJECTS".to_string());
     }
+    let b64 = |b: &[u8]| format!("data:image/png;base64,{}", base64::engine::general_purpose::STANDARD.encode(b));
+    let measurements = if a.found { measure::measure_scan(path, &current_scale(), None).ok() } else { None };
     Ok(ScanOutcome {
-        preview: format!("data:image/png;base64,{}", base64::engine::general_purpose::STANDARD.encode(&a.preview_png)),
+        preview: b64(&a.preview_png),
+        plain: b64(&a.plain_png),
+        preview_w: a.preview_w,
+        preview_h: a.preview_h,
+        measurements,
         seconds,
         width_px,
         height_px,
@@ -276,9 +307,9 @@ async fn resume_session(app: tauri::AppHandle, pid: String) -> Result<ResumeInfo
     .map_err(|e| e.to_string())?
 }
 
-/// The scale used until the calibration tool exists: nominal 300 dpi, flagged as not calibrated.
+/// The ruler calibration of 13 Nov 2026 (see measure::CAL_DPI_*).
 fn current_scale() -> measure::Scale {
-    measure::Scale::nominal(300.0)
+    measure::Scale::calibrated()
 }
 
 #[tauri::command]
@@ -403,6 +434,7 @@ pub fn run() {
             backup_now,
             test_scanner,
             new_session_id,
+            data_dir_status,
             find_unfinished,
             damaged_sessions,
             resume_session,
@@ -419,4 +451,21 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::dir_usable;
+    use std::path::Path;
+
+    #[test]
+    fn data_folder_is_usable_only_when_its_drive_is_there() {
+        let tmp = std::env::temp_dir();
+        assert!(dir_usable(&tmp));
+        assert!(dir_usable(&tmp.join("not_created_yet_sf")), "a missing folder on a present drive can be created");
+        // a drive letter that is not plugged in (like a flash disk that was pulled out)
+        let gone = ('G'..='Z').map(|c| format!("{c}:\\")).find(|r| !Path::new(r).exists()).expect("a free drive letter");
+        assert!(!dir_usable(&Path::new(&gone).join("hasil smartfoot")));
+        assert!(!dir_usable(Path::new("relative_data_folder_sf")));
+    }
 }

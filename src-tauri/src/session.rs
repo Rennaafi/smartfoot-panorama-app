@@ -21,6 +21,9 @@ pub struct Settings {
     /// Folder for the second copy of all data (None = no second copy).
     #[serde(default)]
     pub backup_dir: Option<String>,
+    /// The first-run screen ("where is the data saved?") has been completed on this laptop.
+    #[serde(default)]
+    pub setup_done: bool,
 }
 
 impl Default for Settings {
@@ -31,7 +34,7 @@ impl Default for Settings {
             let home = std::env::var("USERPROFILE").unwrap_or_else(|_| "C:\\".into());
             format!("{home}\\Documents\\SmartFoot_Data")
         };
-        Settings { data_dir, rounds: 3, scanner: None, station: String::new(), backup_dir: None }
+        Settings { data_dir, rounds: 3, scanner: None, station: String::new(), backup_dir: None, setup_done: false }
     }
 }
 
@@ -156,7 +159,8 @@ pub struct SessionFile {
     pub rounds: u8,
     pub scanner: String,
     pub app_version: String,
-    /// Filled in once the scale calibration tool exists (mm per pixel, both axes).
+    /// The ruler calibration in force when the session was created (mm per pixel, both axes).
+    /// Sessions from before the calibration have null here.
     pub calibration: Option<serde_json::Value>,
     pub scans: Vec<ScanEntry>,
     pub completed: bool,
@@ -245,7 +249,7 @@ pub fn create_session(
         rounds,
         scanner: scanner.to_string(),
         app_version: env!("CARGO_PKG_VERSION").to_string(),
-        calibration: None,
+        calibration: Some(crate::measure::calibration_record()),
         scans: vec![],
         completed: false,
         cancelled: false,
@@ -516,7 +520,7 @@ mod tests {
 
     #[test]
     fn settings_from_the_ui_are_checked() {
-        let ok = Settings { data_dir: "D:\\SmartFoot_Data".into(), rounds: 3, scanner: None, station: " 7my ".into(), backup_dir: Some("  ".into()) };
+        let ok = Settings { data_dir: "D:\\SmartFoot_Data".into(), rounds: 3, scanner: None, station: " 7my ".into(), backup_dir: Some("  ".into()), setup_done: true };
         let v = validate_settings(ok.clone()).unwrap();
         assert_eq!(v.station, "7MY");
         assert!(v.backup_dir.is_none()); // blank = off

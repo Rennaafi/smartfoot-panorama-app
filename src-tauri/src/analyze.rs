@@ -19,6 +19,8 @@ use std::path::Path;
 
 pub struct Analysis {
     pub preview_png: Vec<u8>,
+    /// The same preview without the outline, for the "outline off" switch on the review screen.
+    pub plain_png: Vec<u8>,
     pub found: bool,
     pub touches_edge: bool,
     pub clear: bool,
@@ -376,9 +378,12 @@ pub fn analyze_image(img: &RgbImage) -> Analysis {
     }
     let mut png = Vec::new();
     prev.write_to(&mut std::io::Cursor::new(&mut png), image::ImageFormat::Png).expect("png encode");
+    let mut plain = Vec::new();
+    img.write_to(&mut std::io::Cursor::new(&mut plain), image::ImageFormat::Png).expect("png encode");
 
     Analysis {
         preview_png: png,
+        plain_png: plain,
         found,
         touches_edge,
         clear,
