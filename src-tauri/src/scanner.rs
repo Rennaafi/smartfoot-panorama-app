@@ -267,7 +267,7 @@ fn friendly_with(raw: &str, still_listed: bool) -> String {
     } else if r.contains("driver threw an exception") {
         // measured 2026-11-03 on the LiDE 300 driverless route: LOCK closed -> this error,
         // LOCK open -> the same scan succeeds. (The Canon IJ route returns a blank image instead.)
-        "LOCKED: the scan could not start, most likely because the transport LOCK switch is closed. Open it and try again.".into()
+        "LOCKED: the scan could not start. Check that the transport LOCK switch is open and that the scanner is fully assembled (it needs its own glass panel to start a scan), then try again.".into()
     } else if r.to_lowercase().contains("busy") {
         "BUSY: the scanner is busy. Wait a few seconds and try again.".into()
     } else {
