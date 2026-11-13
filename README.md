@@ -2,7 +2,7 @@
 
 Windows desktop app for the Smart Foot Panorama station: it scans the sole of a seated patient's foot on a Canon CanoScan LiDE 300 flatbed scanner, checks the scan, saves it to a session folder and measures foot length, width, contact area and the Cavanagh arch index.
 
-Status: work in progress (UI P4 research project). Measurements are **uncalibrated** (nominal 300 dpi) until the calibration tool is built on the final casing, and the arch-index thresholds are not validated for a seated posture, so the app shows no flat / normal / high label.
+Status: work in progress (UI P4 research project). Measurements use the **ruler calibration of 13 Nov 2026** on the final case (scan axis 300.7 dpi, sensor axis 299.5 dpi; constants in `src-tauri/src/measure.rs`, written into every session file). The precision shown next to each value (± in `src/extra.js`, `PREC`) is half the range over 8 repeat placements of one foot. The arch-index thresholds are not validated for a seated posture, so the app shows no flat / normal / high label.
 
 ## What it does
 
