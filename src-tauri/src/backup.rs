@@ -7,7 +7,7 @@
 //! shown in the app instead.
 
 use serde::Serialize;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::Mutex;
 
 /// What the app shows about the second copy.
@@ -104,46 +104,54 @@ fn copy_tree(from: &Path, to: &Path, n: &mut usize) -> Result<(), String> {
     Ok(())
 }
 
-/// Mirror one session folder (and the master CSV next to the data folder) into `backup_root`.
-pub fn sync_session(data_dir: &Path, pid_dir: &Path, backup_root: &Path) -> Result<usize, String> {
+/// Copy only the files (not sub-folders) of `from` into `to`.
+fn copy_files_of(from: &Path, to: &Path, n: &mut usize) -> Result<(), String> {
+    for e in std::fs::read_dir(from).map_err(|e| format!("{}: {e}", from.display()))?.flatten() {
+        let name = e.file_name().to_string_lossy().to_string();
+        if e.path().is_file() && !name.ends_with(".tmp") && !name.ends_with(".copying") && copy_if_changed(&e.path(), &to.join(&name))? {
+            *n += 1;
+        }
+    }
+    Ok(())
+}
+
+/// Mirror what one save touched: the patient folder (if given), the files of its session folder
+/// (sesi.json, the session Excel) and the files of the data folder (master Excel, research CSV).
+/// `sesi_dir` and `patient_dir` must lie inside `data_dir`; their place below it is kept.
+pub fn sync_part(data_dir: &Path, sesi_dir: Option<&Path>, patient_dir: Option<&Path>, backup_root: &Path) -> Result<usize, String> {
     let r = (|| {
         check_dir(data_dir, backup_root)?;
         let mut n = 0;
-        if let Some(name) = pid_dir.file_name() {
-            if pid_dir.is_dir() {
-                copy_tree(pid_dir, &backup_root.join(name), &mut n)?;
+        let rel = |p: &Path| p.strip_prefix(data_dir).map(|r| backup_root.join(r)).map_err(|_| format!("{} is not inside the data folder", p.display()));
+        if let Some(pd) = patient_dir {
+            if pd.is_dir() {
+                copy_tree(pd, &rel(pd)?, &mut n)?;
             }
         }
-        copy_csv(data_dir, backup_root, &mut n)?;
+        if let Some(sd) = sesi_dir {
+            if sd.is_dir() {
+                copy_files_of(sd, &rel(sd)?, &mut n)?;
+            }
+        }
+        if data_dir.is_dir() {
+            copy_files_of(data_dir, backup_root, &mut n)?;
+        }
         Ok(n)
     })();
     record(&r);
     r
 }
 
-/// Mirror every session (the "back up now" button, and the first copy of older sessions).
+/// Mirror everything (the "back up now" button, and the first copy of older sessions).
 pub fn sync_all(data_dir: &Path, backup_root: &Path) -> Result<usize, String> {
     let r = (|| {
         check_dir(data_dir, backup_root)?;
         let mut n = 0;
-        for e in std::fs::read_dir(data_dir).map_err(|e| e.to_string())?.flatten() {
-            if e.path().join("session.json").is_file() {
-                copy_tree(&e.path(), &backup_root.join(e.file_name()), &mut n)?;
-            }
-        }
-        copy_csv(data_dir, backup_root, &mut n)?;
+        copy_tree(data_dir, backup_root, &mut n)?;
         Ok(n)
     })();
     record(&r);
     r
-}
-
-fn copy_csv(data_dir: &Path, backup_root: &Path, n: &mut usize) -> Result<(), String> {
-    let csv: PathBuf = data_dir.join("measurements.csv");
-    if csv.is_file() && copy_if_changed(&csv, &backup_root.join("measurements.csv"))? {
-        *n += 1;
-    }
-    Ok(())
 }
 
 #[cfg(test)]
@@ -157,30 +165,41 @@ mod tests {
         d
     }
 
+    /// data\<sesi>\Operator A\001 B\ with a scan, a pending scan, sesi.json, session and master files.
+    fn layout(root: &Path) -> (PathBuf, PathBuf, PathBuf) {
+        let data = root.join("data");
+        let sesi = data.join("2026-11-17 Beji");
+        let pat = sesi.join("Operator A").join("001 B");
+        for sub in ["_pending", "ditolak"] {
+            std::fs::create_dir_all(pat.join(sub)).unwrap();
+        }
+        std::fs::write(sesi.join("sesi.json"), b"{}").unwrap();
+        std::fs::write(sesi.join("Rekap sesi.xlsx"), b"x").unwrap();
+        std::fs::write(pat.join("data pasien.json"), b"{}").unwrap();
+        std::fs::write(pat.join("Kaki kiri - pindaian asli.png"), b"scan-a").unwrap();
+        std::fs::write(pat.join("_pending/right.png"), b"not yet accepted").unwrap();
+        std::fs::write(data.join("Rekap semua sesi.xlsx"), b"m").unwrap();
+        (data, sesi, pat)
+    }
+
     #[test]
     fn mirrors_new_and_changed_files_but_not_pending() {
         let root = tmp("mirror");
-        let (data, bk) = (root.join("data"), root.join("bk"));
-        let s = data.join("SFP-0001");
-        for sub in ["scans", "_pending", "rejected"] {
-            std::fs::create_dir_all(s.join(sub)).unwrap();
-        }
-        std::fs::write(s.join("session.json"), b"{}").unwrap();
-        std::fs::write(s.join("scans/right_1.png"), b"scan-a").unwrap();
-        std::fs::write(s.join("_pending/left_1.png"), b"not yet accepted").unwrap();
-        std::fs::write(data.join("measurements.csv"), b"a,b\n").unwrap();
+        let bk = root.join("bk");
+        let (data, sesi, pat) = layout(&root);
+        assert_eq!(sync_part(&data, Some(&sesi), Some(&pat), &bk).unwrap(), 5); // patient json+png, sesi json+xlsx, master
+        assert_eq!(std::fs::read(bk.join("2026-11-17 Beji/Operator A/001 B/Kaki kiri - pindaian asli.png")).unwrap(), b"scan-a");
+        assert!(!bk.join("2026-11-17 Beji/Operator A/001 B/_pending").exists());
+        assert_eq!(sync_part(&data, Some(&sesi), Some(&pat), &bk).unwrap(), 0); // nothing changed, nothing copied
 
-        assert_eq!(sync_session(&data, &s, &bk).unwrap(), 3); // json, png, csv
-        assert_eq!(std::fs::read(bk.join("SFP-0001/scans/right_1.png")).unwrap(), b"scan-a");
-        assert!(!bk.join("SFP-0001/_pending").exists());
-        assert_eq!(sync_session(&data, &s, &bk).unwrap(), 0); // nothing changed, nothing copied
-
-        std::fs::write(s.join("session.json"), b"{\"x\":1}").unwrap();
-        std::fs::write(s.join("scans/left_1.png"), b"scan-b").unwrap();
+        std::fs::write(pat.join("data pasien.json"), b"{\"x\":1}").unwrap();
+        std::fs::write(pat.join("Kaki kanan - pindaian asli.png"), b"scan-b").unwrap();
         assert_eq!(sync_all(&data, &bk).unwrap(), 2);
-        assert_eq!(std::fs::read(bk.join("SFP-0001/session.json")).unwrap(), b"{\"x\":1}");
+        assert_eq!(std::fs::read(bk.join("2026-11-17 Beji/Operator A/001 B/data pasien.json")).unwrap(), b"{\"x\":1}");
         // the main data is never touched
-        assert!(s.join("_pending/left_1.png").exists());
+        assert!(pat.join("_pending/right.png").exists());
+        // a path outside the data folder is refused, not copied somewhere odd
+        assert!(sync_part(&data, Some(&root), None, &bk).is_err());
     }
 
     #[test]
@@ -196,38 +215,36 @@ mod tests {
     #[test]
     fn backup_problems_fail_cleanly_and_never_touch_the_main_data() {
         let root = tmp("problems");
-        let (data, bk) = (root.join("data"), root.join("bk"));
-        let s = data.join("SFP-0001");
-        std::fs::create_dir_all(s.join("scans")).unwrap();
-        std::fs::write(s.join("session.json"), b"{}").unwrap();
-        std::fs::write(s.join("scans/right_1.png"), b"scan").unwrap();
+        let bk = root.join("bk");
+        let (data, sesi, pat) = layout(&root);
+        let scan = pat.join("Kaki kiri - pindaian asli.png");
 
         // backup "folder" is actually a file
         let file = root.join("iam_a_file");
         std::fs::write(&file, b"x").unwrap();
-        assert!(sync_session(&data, &s, &file).unwrap_err().starts_with("BACKUP_FAILED"));
+        assert!(sync_part(&data, Some(&sesi), Some(&pat), &file).unwrap_err().starts_with("BACKUP_FAILED"));
         // backup root under a file: cannot be created
         assert!(sync_all(&data, &file.join("sub")).is_err());
         // a drive that does not exist (USB unplugged)
         let gone = std::path::PathBuf::from("Q:\\no_such_drive\\SmartFoot_Backup");
         if !Path::new("Q:\\").exists() {
-            assert!(sync_session(&data, &s, &gone).is_err());
+            assert!(sync_part(&data, Some(&sesi), Some(&pat), &gone).is_err());
         }
         // a blocker inside the backup: a FILE where the session folder should go
         std::fs::create_dir_all(&bk).unwrap();
-        std::fs::write(bk.join("SFP-0001"), b"in the way").unwrap();
-        assert!(sync_session(&data, &s, &bk).is_err());
-        // a session folder that vanished: nothing to copy, not an error
-        assert_eq!(sync_session(&data, &data.join("SFP-9999"), &root.join("bk2")).unwrap(), 0);
+        std::fs::write(bk.join("2026-11-17 Beji"), b"in the way").unwrap();
+        assert!(sync_part(&data, Some(&sesi), Some(&pat), &bk).is_err());
+        // a patient folder that vanished: nothing to copy, not an error
+        assert_eq!(sync_part(&data, None, Some(&sesi.join("Operator A/999 X")), &root.join("bk2")).unwrap(), 1); // master only
         // after every failure the main data is exactly as it was
-        assert_eq!(std::fs::read(s.join("scans/right_1.png")).unwrap(), b"scan");
-        assert_eq!(std::fs::read(s.join("session.json")).unwrap(), b"{}");
+        assert_eq!(std::fs::read(&scan).unwrap(), b"scan-a");
         // a leftover half-copied file from a crash is overwritten, never mistaken for a good copy
-        std::fs::remove_file(bk.join("SFP-0001")).unwrap();
-        std::fs::create_dir_all(bk.join("SFP-0001/scans")).unwrap();
-        std::fs::write(bk.join("SFP-0001/scans/right_1.copying"), b"half").unwrap();
-        assert!(sync_session(&data, &s, &bk).is_ok());
-        assert_eq!(std::fs::read(bk.join("SFP-0001/scans/right_1.png")).unwrap(), b"scan");
+        std::fs::remove_file(bk.join("2026-11-17 Beji")).unwrap();
+        let bp = bk.join("2026-11-17 Beji/Operator A/001 B");
+        std::fs::create_dir_all(&bp).unwrap();
+        std::fs::write(bp.join("Kaki kiri - pindaian asli.copying"), b"half").unwrap();
+        assert!(sync_part(&data, Some(&sesi), Some(&pat), &bk).is_ok());
+        assert_eq!(std::fs::read(bp.join("Kaki kiri - pindaian asli.png")).unwrap(), b"scan-a");
     }
 
     #[test]

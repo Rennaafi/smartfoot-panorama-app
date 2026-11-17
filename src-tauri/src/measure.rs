@@ -87,6 +87,22 @@ pub struct Measurements {
     pub toe_base: [f32; 2],
     /// True when a team member moved heel centre / toe tip by hand.
     pub corrected: bool,
+    /// Clarke's angle in degrees (None = could not be measured, or a file from before v0.2).
+    #[serde(default)]
+    pub clarke_deg: Option<f32>,
+}
+
+/// Clarke's angle in words, the client's table (17 Nov 2026): below 31 flat, 31-41 normal, above 41
+/// cavus. The 31 degree flatfoot cut-off agrees with Pita-Fernandez et al. 2015, J Epidemiol 25(2)
+/// (31.5 for age 40-64, 30.5 for 65+); the 41 degree upper limit is the client's.
+pub fn clarke_label(deg: f32) -> &'static str {
+    if deg < 31.0 { "datar (flat foot)" } else if deg <= 41.0 { "normal" } else { "tinggi (cavus)" }
+}
+
+/// Arch index in words, Cavanagh & Rodgers 1987 (standing footprints): 0.21 or less high arch,
+/// 0.26 or more flat, normal in between.
+pub fn ai_label(ai: f32) -> &'static str {
+    if ai <= 0.21 { "tinggi (cavus)" } else if ai < 0.26 { "normal" } else { "datar (flat foot)" }
 }
 
 type P = [f32; 2];
@@ -262,6 +278,7 @@ pub fn measure_mask(mask: &[bool], w: usize, h: usize, scale: &Scale, down: f32,
         toe_base: back(add(hc, a, t_base)),
         fw_line,
         corrected: pts.is_some(),
+        clarke_deg: None,
     })
 }
 
