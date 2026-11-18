@@ -881,7 +881,9 @@ function clarkeDeg(P, sc) {
 // back = optional function to run after confirm/skip instead of moving on in the patient flow
 async function openCheck(side, outline, back) {
   try {
-    const v = await invoke("get_scan_view", { key: st.pat.key, side });
+    // a later check (no fresh outline from the review screen) asks the backend to draw one
+    const v = await invoke("get_scan_view", { key: st.pat.key, side, outline: !outline });
+    outline = outline ?? v.outline_preview ?? null;
     const m = v.measurements;
     if (!m) { back ? back() : afterFoot(); return; }
     // rough fallback if the backend had no Clarke guess: tangent from toe base to heel end, arch midway

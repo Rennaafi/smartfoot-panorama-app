@@ -558,12 +558,15 @@ struct ScanView {
     check: Option<session::PointCheck>,
     /// Graded contact picture ("Peta kontak") at preview size, JPEG data URL, for the layer switch.
     contact_preview: Option<String>,
+    /// The scan with the detected outline drawn on (PNG data URL), only when asked for: it needs the
+    /// outline finder to run again (the "Garis tepi" layer when a foot is checked later).
+    outline_preview: Option<String>,
 }
 
 const VIEW_DOWN: u32 = 4;
 
 #[tauri::command]
-async fn get_scan_view(app: tauri::AppHandle, key: String, side: String) -> Result<ScanView, String> {
+async fn get_scan_view(app: tauri::AppHandle, key: String, side: String, outline: Option<bool>) -> Result<ScanView, String> {
     tauri::async_runtime::spawn_blocking(move || {
         let (_, dir) = patient_dir(&app, &key)?;
         let p = session::read_patient(&dir)?;
@@ -585,6 +588,11 @@ async fn get_scan_view(app: tauri::AppHandle, key: String, side: String) -> Resu
                 image::codecs::jpeg::JpegEncoder::new_with_quality(&mut b, 85).encode_image(&g).ok()?;
                 Some(format!("data:image/jpeg;base64,{}", base64::engine::general_purpose::STANDARD.encode(&b)))
             }),
+            outline_preview: if outline.unwrap_or(false) {
+                analyze::analyze(&dir.join(&e.file)).ok().filter(|a| a.found).map(|a| format!("data:image/png;base64,{}", base64::engine::general_purpose::STANDARD.encode(&a.preview_png)))
+            } else {
+                None
+            },
         })
     })
     .await
