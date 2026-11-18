@@ -825,7 +825,9 @@ function scanScreen(m) {
 function turnScreen(m) {
   m.innerHTML = `<h1>${t("turn")}</h1><p class="sub">${t("turnSub")}</p>${noticeBox()}${warnBox()}${errBox()}<div class="card"><div class="row" style="gap:36px;flex-wrap:nowrap">
     <div style="flex:0 0 260px">${turnPic}</div><div style="flex:1"><div class="pname">${String(st.pat.patient.no).padStart(3, "0")} · ${esc(st.pat.patient.nama)}</div>
-    <p style="font-size:20px;line-height:1.5;margin:14px 0 26px">${t("turnSub")}</p><button class="btn" id="tgo">${t("turnGo")}</button></div></div></div>`;
+    <p style="font-size:20px;line-height:1.5;margin:14px 0 26px">${t("turnSub")}</p><button class="btn" id="tgo">${t("turnGo")}</button>
+    <div class="row" style="margin-top:22px"><button class="btn bad" id="cancel" style="padding:10px 18px;font-size:15px">${t("cancelP")}</button></div></div></div></div>`;
+  armed($("#cancel"), t("cancelP"), t("cancelSure"), cancelPatient);
   $("#tgo").onclick = () => { st.side = "right"; st.scan = null; st.error = ""; st.screen = "scan"; render(); };
 }
 
