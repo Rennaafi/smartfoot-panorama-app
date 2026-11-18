@@ -39,21 +39,21 @@ const X = {
     i_C: ["Depan (C)", "Sepertiga depan dari telapak tanpa jari, yaitu bagian bola kaki [1]."],
     i_csi: ["Chippaux-Smirak (%)", "Lebar tersempit bagian tengah (lengkung) dibagi lebar terlebar bagian depan, dikali 100 [1]. Semakin besar, semakin lebar bagian lengkung yang menyentuh kaca."],
     tour: [
-      ["#steps", "Alur kerja", "Setiap pasien melewati 4 langkah: Mulai, Pindai, Tinjau, Selesai. Langkah yang aktif berwarna putih."],
+      ["#steps", "Alur kerja", "Setiap pasien melewati 6 langkah: Data pasien, Kaki kiri, Kaki kanan, INLOW, Catatan, Selesai. Langkah yang sudah dibuka bisa diketuk untuk kembali."],
       ["#schip", "Status scanner", "Hijau = scanner siap. Kuning atau merah = ada masalah, ketuk untuk memeriksa lagi."],
-      ["#main .card", "Data pasien", "Isi usia, jenis kelamin, dan inisial operator. Tidak perlu nama. ID dibuat otomatis."],
+      ["#main .card", "Sesi", "Satu sesi = satu hari di satu tempat. Mulai sesi dengan tempat dan nama operator, lalu tambahkan pasien satu per satu."],
       ["#guideBtn", "Panduan", "Langkah lengkap dengan gambar bisa dibuka kapan saja dari tombol ini."],
       ["#teamBtn", "Settings", "Pengaturan: folder data, scanner, salinan cadangan, dan kalibrasi skala."],
     ],
     tourNext: "Berikutnya →", tourEnd: "Selesai", tourSkip: "Lewati", tourHide: "Jangan tampilkan lagi", tourReplay: "Mulai tur aplikasi",
     gTitle: "Panduan pemakaian", gPrev: "← Sebelumnya", gNext: "Berikutnya →",
     guide: [
-      ["Isi data pasien", "Isi usia, jenis kelamin, dan inisial operator. Tidak perlu nama, ID dibuat otomatis. Tekan <b>Mulai pindai</b>."],
-      ["Letakkan kaki", "Pasien duduk. Letakkan kaki di tengah kaca, tumit beberapa cm dari tepi. Jari kaki rileks, jangan menekuk."],
+      ["Isi data pasien", "Tekan <b>+ Pasien baru</b>. Isi nama, usia, dan jenis kelamin (wajib); tekanan darah dan berat badan boleh dikosongkan. Pilih posisi berdiri atau duduk."],
+      ["Letakkan kaki", "Kaki kiri dulu: kaki di atas kaca, tumit menempel pada penahan. Berdiri seimbang di kedua kaki. Jari kaki rileks, jangan menekuk."],
       ["Tutup dengan kain hitam", "Tutupi kaki dan betis dengan kain hitam sampai seluruh kaca tertutup dan tidak ada cahaya masuk dari bawah. Jangan ada kain di bawah telapak."],
       ["Pindai", "Tekan <b>Mulai pindai</b>. Kaki tetap diam sekitar 20 detik sampai pemindaian selesai."],
       ["Tinjau", "Pastikan garis biru mengikuti bentuk kaki. Tekan <b>Ulangi</b> jika jari menekuk, kaki terpotong di tepi, atau ada peringatan. Jika sudah baik, tekan <b>Terima</b>."],
-      ["Selesai", "Setelah semua kaki dipindai, sesi tersimpan otomatis dan disalin ke folder cadangan. Tekan <b>Sesi baru</b> untuk pasien berikutnya."],
+      ["Berbalik, lalu INLOW", "Setelah kaki kiri, pasien berbalik untuk kaki kanan. Lalu isi formulir INLOW dan catatan, dan tekan <b>Simpan dan selesai</b>. Semua tersimpan otomatis dan disalin ke folder cadangan."],
     ],
   },
   en: {
@@ -75,21 +75,21 @@ const X = {
     i_C: ["Forefoot (C)", "The front third of the sole without toes: the ball of the foot [1]."],
     i_csi: ["Chippaux-Smirak (%)", "The narrowest width of the middle (arch) divided by the widest width of the front, times 100 [1]. Higher means a wider part of the arch touches the glass."],
     tour: [
-      ["#steps", "Workflow", "Every patient goes through 4 steps: Start, Scan, Review, Done. The active step is white."],
+      ["#steps", "Workflow", "Every patient goes through 6 steps: Patient, Left foot, Right foot, INLOW, Notes, Done. Steps already reached can be tapped to go back."],
       ["#schip", "Scanner status", "Green = the scanner is ready. Amber or red = something needs attention, tap to check again."],
-      ["#main .card", "Patient details", "Enter age, sex and operator initials. No name needed. The ID is made automatically."],
+      ["#main .card", "Session", "One session = one day at one place. Start it with the place and the operator's name, then add patients one by one."],
       ["#guideBtn", "Guide", "The full steps with pictures can be opened any time from this button."],
       ["#teamBtn", "Settings", "Settings: data folder, scanner, backup copy and scale calibration."],
     ],
     tourNext: "Next →", tourEnd: "Done", tourSkip: "Skip", tourHide: "Don't show again", tourReplay: "Start the app tour",
     gTitle: "How to use", gPrev: "← Previous", gNext: "Next →",
     guide: [
-      ["Enter patient details", "Enter age, sex and operator initials. No name needed, the ID is made automatically. Press <b>Start scanning</b>."],
-      ["Place the foot", "The patient sits. Place the foot in the middle of the glass, heel a few cm from the edge. Toes relaxed, not curled."],
+      ["Enter patient details", "Press <b>+ New patient</b>. Enter name, age and sex (required); blood pressure and weight may stay empty. Choose standing or seated."],
+      ["Place the foot", "Left foot first: foot on the glass, heel against the stop. Stand evenly on both feet. Toes relaxed, not curled."],
       ["Cover with the black cloth", "Cover the foot and lower leg with the black cloth until the whole glass is covered and no light gets in from below. No cloth under the sole."],
       ["Scan", "Press <b>Start scan</b>. The foot stays still for about 20 seconds until the scan ends."],
       ["Review", "Check that the blue line follows the foot. Press <b>Retake</b> if the toes are curled, the foot is cut off at the edge, or there is a warning. If it looks right, press <b>Accept</b>."],
-      ["Done", "When every foot is scanned, the session is saved automatically and copied to the backup folder. Press <b>New session</b> for the next patient."],
+      ["Turn around, then INLOW", "After the left foot, the patient turns around for the right foot. Then fill in the INLOW form and notes, and press <b>Save and finish</b>. Everything is saved and copied to the backup folder automatically."],
     ],
   },
 };
@@ -262,7 +262,6 @@ function openGuide(start = 0) {
 let tour = null;
 function startTour(force) {
   if (!force && localStorage.getItem("tourDone") === "1") return;
-  if (st.screen !== "start") { st.screen = "start"; render(); }
   tour = { i: 0 };
   paintTour();
 }
@@ -275,7 +274,7 @@ function paintTour() {
   $("#tour")?.remove();
   if (!tour) return;
   const S = x("tour"), [sel, h, p] = S[tour.i], el = document.querySelector(sel);
-  if (!el) { tour.i < S.length - 1 ? (tour.i++, paintTour()) : endTour(false); return; }
+  if (!el || !el.offsetWidth) { tour.i < S.length - 1 ? (tour.i++, paintTour()) : endTour(false); return; }
   const r = el.getBoundingClientRect(), last = tour.i === S.length - 1;
   const d = document.createElement("div"); d.id = "tour";
   const below = r.bottom + 230 < innerHeight;
