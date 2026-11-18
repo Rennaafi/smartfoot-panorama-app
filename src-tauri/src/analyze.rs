@@ -179,7 +179,7 @@ fn percentile(mut v: Vec<f32>, q: f32) -> f32 {
 }
 
 /// Mean over a (2r+1)^2 box, edges clamped (integral image).
-fn box_blur(v: &[f32], w: usize, h: usize, r: usize) -> Vec<f32> {
+pub(crate) fn box_blur(v: &[f32], w: usize, h: usize, r: usize) -> Vec<f32> {
     let mut ii = vec![0f64; (w + 1) * (h + 1)];
     for y in 0..h {
         let mut row = 0f64;
@@ -397,7 +397,7 @@ pub fn analyze_image(img: &RgbImage) -> Analysis {
 }
 
 /// Square dilation (`dilate = true`) or erosion by radius `r`, using running sums.
-fn morph(m: &[bool], w: usize, h: usize, r: usize, dilate: bool) -> Vec<bool> {
+pub(crate) fn morph(m: &[bool], w: usize, h: usize, r: usize, dilate: bool) -> Vec<bool> {
     let src: Vec<u8> = m.iter().map(|&b| if b != dilate { 0 } else { 1 }).collect(); // erosion works on the inverse
     let mut tmp = vec![0u32; w * h];
     for y in 0..h {

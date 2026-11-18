@@ -7,7 +7,7 @@
 //! "Rekap sesi <...>.xlsx" in each session folder and "Rekap semua sesi.xlsx" in the data folder.
 
 use crate::inlow::{self, FootScores, ITEMS};
-use crate::measure::{ai_label, clarke_label, Measurements};
+use crate::measure::{clarke_label, Measurements};
 use crate::session::{self, Patient, Sesi};
 use rust_xlsxwriter::{Color, Format, FormatAlign, FormatBorder, Workbook, Worksheet, XlsxError};
 use std::path::{Path, PathBuf};
@@ -17,14 +17,20 @@ fn comma(v: f32, decimals: usize) -> String {
 }
 
 fn meas<'a>(p: &'a Patient, side: &str) -> Option<&'a Measurements> {
-    p.scans.iter().find(|e| e.side == side).and_then(|e| e.measurements.as_ref())
+    entry(p, side).and_then(|e| e.measurements.as_ref())
+}
+
+fn entry<'a>(p: &'a Patient, side: &str) -> Option<&'a session::ScanEntry> {
+    p.scans.iter().find(|e| e.side == side)
 }
 
 fn foot_scores<'a>(p: &'a Patient, side: &str) -> &'a FootScores {
     if side == "right" { &p.inlow.kanan } else { &p.inlow.kiri }
 }
 
-/// One foot in words, e.g. "Risiko rendah (B), Clarke 35° normal, AI 0,24 normal".
+/// One foot in words, e.g. "Risiko rendah (B), Clarke 35° normal, AI 0,36 (garis tepi)".
+/// Clarke gets a label only after a person confirmed its points; AI never gets Cavanagh's label,
+/// because it is measured on the outline, which includes the lifted arch (2026-11-18 agreement).
 pub fn foot_summary(p: &Patient, side: &str) -> String {
     let mut parts = vec![];
     match foot_scores(p, side).total() {
@@ -34,14 +40,15 @@ pub fn foot_summary(p: &Patient, side: &str) -> String {
         }
         None => parts.push("INLOW belum lengkap".into()),
     }
-    match meas(p, side) {
-        Some(m) => {
-            if let Some(c) = m.clarke_deg {
-                parts.push(format!("Clarke {}° {}", comma(c, 0), clarke_label(c)));
+    match (entry(p, side), meas(p, side)) {
+        (Some(e), Some(m)) => {
+            match session::reported_clarke(e) {
+                (Some(c), "diperiksa") => parts.push(format!("Clarke {}° {}", comma(c, 0), clarke_label(c))),
+                _ => parts.push("Sudut Clarke belum diperiksa".into()),
             }
-            parts.push(format!("AI {} {}", comma(m.ai, 2), ai_label(m.ai)));
+            parts.push(format!("AI {} (garis tepi)", comma(m.ai, 2)));
         }
-        None => parts.push(if p.scans.iter().any(|e| e.side == side) { "belum terukur".into() } else { "belum dipindai".into() }),
+        _ => parts.push(if p.scans.iter().any(|e| e.side == side) { "belum terukur".into() } else { "belum dipindai".into() }),
     }
     parts.join(", ")
 }
@@ -85,7 +92,7 @@ fn formats() -> Fmt {
     }
 }
 
-const EXTRA: [&str; 13] = ["Tanggal", "Tempat", "Operator", "Posisi", "Panjang kaki kanan (mm)", "Panjang kaki kiri (mm)", "Lebar kaki kanan (mm)", "Lebar kaki kiri (mm)", "Catatan", "Tanda manual", "Status", "ID internal", "Folder"];
+const EXTRA: [&str; 15] = ["Tanggal", "Tempat", "Operator", "Posisi", "Panjang kaki kanan (mm)", "Panjang kaki kiri (mm)", "Lebar kaki kanan (mm)", "Lebar kaki kiri (mm)", "Catatan", "Tanda manual", "Status", "ID internal", "Folder", "Status Clarke kanan", "Status Clarke kiri"];
 
 /// Column of the first INLOW item (after No, Pasien, Usia, Kelamin, TD, BB).
 const C_ITEMS: u16 = 6;
@@ -160,7 +167,7 @@ fn write_sheet(ws: &mut Worksheet, title: &str, rows: &[(&Sesi, String, &Patient
         c += 4;
         for (k, side) in ["right", "left"].iter().enumerate() {
             let m = meas(p, side);
-            match m.and_then(|m| m.clarke_deg) {
+            match entry(p, side).and_then(|e| session::reported_clarke(e).0) {
                 Some(v) => ws.write_number_with_format(r, c + k as u16, v as f64, &f.num1)?,
                 None => ws.write_blank(r, c + k as u16, &f.cell_c)?,
             };
@@ -194,6 +201,13 @@ fn write_sheet(ws: &mut Worksheet, title: &str, rows: &[(&Sesi, String, &Patient
         ws.write_string_with_format(r, e + 10, status, &f.cell_c)?;
         ws.write_string_with_format(r, e + 11, &p.id, &f.cell)?;
         ws.write_string_with_format(r, e + 12, folder, &f.cell)?;
+        for (k, side) in ["right", "left"].iter().enumerate() {
+            let st = match entry(p, side) {
+                Some(en) if en.measurements.is_some() => session::reported_clarke(en).1,
+                _ => "",
+            };
+            ws.write_string_with_format(r, e + 13 + k as u16, st, &f.cell_c)?;
+        }
     }
     // --- widths, frozen header
     ws.set_column_width(0, 5)?;
@@ -235,10 +249,10 @@ fn write_legend(ws: &mut Worksheet, f: &Fmt) -> Result<(), XlsxError> {
     }
     r += 1;
     ws.write_string_with_format(r, 0, "Clarke's angle", &f.head)?;
-    ws.write_string_with_format(r, 1, "< 31° datar (flat foot); 31-41° normal; > 41° tinggi (cavus). Tabel klien; batas 31° sesuai Pita-Fernández dkk. 2015, J Epidemiol 25(2).", &f.wrap)?;
+    ws.write_string_with_format(r, 1, "< 31° datar (flat foot); 31-41° normal; > 41° tinggi (cavus). Tabel klien; batas 31° sesuai Pita-Fernández dkk. 2015, J Epidemiol 25(2). Titik sudut ditempatkan aplikasi lalu diperiksa operator; label hanya diberikan bila status \"diperiksa\". Status \"otomatis\" = perkiraan aplikasi, belum diperiksa.", &f.wrap)?;
     r += 1;
     ws.write_string_with_format(r, 0, "Arch index", &f.head)?;
-    ws.write_string_with_format(r, 1, "≤ 0,21 tinggi (cavus); 0,21-0,26 normal; ≥ 0,26 datar (flat foot). Cavanagh & Rodgers 1987, J Biomech 20(5), jejak kaki berdiri.", &f.wrap)?;
+    ws.write_string_with_format(r, 1, "Diukur pada garis tepi kaki di pindaian (termasuk lengkung yang tidak menapak), sehingga nilainya lebih tinggi daripada jejak kaki tinta. Karena itu batas Cavanagh & Rodgers 1987 (J Biomech 20(5); ≤ 0,21 tinggi, ≥ 0,26 datar) TIDAK dipakai untuk memberi label.", &f.wrap)?;
     r += 2;
     ws.write_string_with_format(r, 0, "Catatan", &f.head)?;
     ws.write_string_with_format(r, 1, inlow::SCORING_NOTES, &f.wrap)?;
@@ -322,11 +336,19 @@ mod tests {
             fl_mm: 245.0, fw_mm: 94.0, area_cm2: 150.0, toeless_area_cm2: 130.0, hind_cm2: 40.0, mid_cm2: 31.0, fore_cm2: 59.0,
             ai: 0.2384, csi_pct: 40.0, toe_base_method: "gap".into(), toeless_frac: 0.75,
             heel_centre: [0.0; 2], toe_tip: [0.0; 2], heel_end: [0.0; 2], fw_line: [[0.0; 2]; 2], toe_base: [0.0; 2], corrected: false,
-            clarke_deg: Some(35.2),
+            clarke_deg: Some(35.2), clarke_pts: None, clarke_source: None, contact: None,
         };
-        p.scans.push(ScanEntry { file: raw_scan_name("right"), side: "right".into(), attempt: 1, seconds: 12.0, width_px: 1, height_px: 1, dpi: 300, rotated_180: true, accepted_at: now_iso(), warnings: vec![], measurements: Some(m) });
-        assert_eq!(foot_summary(&p, "right"), "Risiko rendah (B), Clarke 35° normal, AI 0,24 normal");
-        assert!(kesimpulan(&p).starts_with("Kanan: Risiko rendah (B), Clarke 35° normal, AI 0,24 normal. Kiri: INLOW belum lengkap"));
+        p.scans.push(ScanEntry { file: raw_scan_name("right"), side: "right".into(), attempt: 1, seconds: 12.0, width_px: 1, height_px: 1, dpi: 300, rotated_180: true, accepted_at: now_iso(), warnings: vec![], measurements: Some(m), check: None, check_history: vec![], images_version: None });
+        // the app's guess alone never gets a label
+        assert_eq!(foot_summary(&p, "right"), "Risiko rendah (B), Sudut Clarke belum diperiksa, AI 0,24 (garis tepi)");
+        let chk = |status: &str, deg: Option<f32>, reason: Option<&str>| PointCheck { status: status.into(), skip_reason: reason.map(Into::into), operator: "Rina".into(), at: now_iso(), clarke_pts: None, clarke_deg: deg, clarke_moved_mm: None, ai_moved_mm: None, guess_source: None };
+        p.scans[0].check = Some(chk("dilewati", None, Some("antrean panjang")));
+        assert_eq!(foot_summary(&p, "right"), "Risiko rendah (B), Sudut Clarke belum diperiksa, AI 0,24 (garis tepi)");
+        assert_eq!(unchecked_sides(&p), vec!["right".to_string()]);
+        p.scans[0].check = Some(chk("diperiksa", Some(38.6), None));
+        assert_eq!(foot_summary(&p, "right"), "Risiko rendah (B), Clarke 39° normal, AI 0,24 (garis tepi)");
+        assert!(kesimpulan(&p).starts_with("Kanan: Risiko rendah (B), Clarke 39° normal, AI 0,24 (garis tepi). Kiri: INLOW belum lengkap"));
+        assert!(unchecked_sides(&p).is_empty());
     }
 
     #[test]

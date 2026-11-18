@@ -157,6 +157,7 @@ pub fn sync_all(data_dir: &Path, backup_root: &Path) -> Result<usize, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::PathBuf;
 
     fn tmp(name: &str) -> PathBuf {
         let d = std::env::temp_dir().join(format!("sf_bk_{name}_{}", std::process::id()));

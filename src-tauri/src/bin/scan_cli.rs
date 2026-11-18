@@ -62,6 +62,38 @@ fn main() {
             Ok(m) => println!("{}", serde_json::to_string_pretty(&m).unwrap()),
             Err(e) => eprintln!("error: {e}"),
         },
-        _ => eprintln!("usage: scan_cli list | status | test | backup <data_dir> <backup_dir> | scan <device> <dpi> <out.png> | analyze <scan.png> <preview.png> | measure <scan.png>"),
+        // Developer diagnostics: outline (grey 128) and contact (white) masks at measuring size.
+        Some("masks") if a.len() == 3 => {
+            let full = image::open(&a[1]).expect("open").to_rgb8();
+            let d = measure::MEASURE_DOWN;
+            let img = image::imageops::resize(&full, full.width() / d, full.height() / d, image::imageops::FilterType::Triangle);
+            let s = analyze::segment(&img, d);
+            let c = smartfoot_app_lib::contact::find(&img, &s.mask, d);
+            let out = image::GrayImage::from_fn(s.w, s.h, |x, y| {
+                let i = (y * s.w + x) as usize;
+                image::Luma([if c.mask[i] { 255 } else if s.mask[i] { 128 } else { 0 }])
+            });
+            out.save(&a[2]).expect("write masks");
+            println!("thr={:.3} contact={:.1}% of foot -> {}", c.thr, c.frac * 100.0, a[2]);
+        }
+        // Team tool: the pictures the app saves for one scan, written into a folder (for checking).
+        Some("pictures") if a.len() == 4 && (a[3] == "left" || a[3] == "right") => {
+            let (scan, out) = (Path::new(&a[1]), Path::new(&a[2]));
+            std::fs::create_dir_all(out).expect("create output folder");
+            match smartfoot_app_lib::figures::write_scan_images(out, &a[3], scan).and_then(|mut f| {
+                let m = measure::measure_scan(scan, &measure::Scale::calibrated(), None)?;
+                f.push(smartfoot_app_lib::figures::write_arch_index_image(out, &a[3], scan, &m)?);
+                Ok(f)
+            }) {
+                Ok(f) => f.iter().for_each(|p| println!("{}", out.join(p).display())),
+                Err(e) => eprintln!("error: {e}"),
+            }
+        }
+        // Team tool: one comparison sheet for a whole session folder (+ a .txt index of the rows).
+        Some("sheet") if a.len() == 3 => match smartfoot_app_lib::figures::session_sheet(Path::new(&a[1]), Path::new(&a[2])) {
+            Ok(n) => println!("{n} row(s) -> {}", a[2]),
+            Err(e) => eprintln!("error: {e}"),
+        },
+        _ => eprintln!("usage: scan_cli list | status | test | backup <data_dir> <backup_dir> | scan <device> <dpi> <out.png> | analyze <scan.png> <preview.png> | measure <scan.png> | masks <scan.png> <masks.png> | pictures <scan.png> <out_dir> <left|right> | sheet <session_dir> <out.jpg>"),
     }
 }

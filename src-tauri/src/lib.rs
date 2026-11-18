@@ -1,6 +1,8 @@
 pub mod analyze;
 pub mod backup;
+pub mod contact;
 pub mod export;
+pub mod figures;
 pub mod inlow;
 pub mod measure;
 pub mod scanner;
@@ -201,6 +203,8 @@ struct PatientRow {
     completed: bool,
     cancelled: bool,
     kesimpulan: String,
+    /// Feet whose reference points nobody has confirmed yet ("Belum diperiksa").
+    unchecked: Vec<String>,
 }
 
 fn patient_row(dd: &Path, dir: &Path, p: &Patient) -> PatientRow {
@@ -214,6 +218,7 @@ fn patient_row(dd: &Path, dir: &Path, p: &Patient) -> PatientRow {
         completed: p.completed,
         cancelled: p.cancelled,
         kesimpulan: export::kesimpulan(p),
+        unchecked: session::unchecked_sides(p),
     }
 }
 
@@ -526,7 +531,8 @@ async fn accept_scan(app: tauri::AppHandle, key: String, side: String, seconds: 
         // measure right away; a failure to find a foot leaves the scan saved but unmeasured
         let m = measure::measure_scan(&dir.join(session::raw_scan_name(&side)), &current_scale(), None).ok();
         session::set_measurements(&dir, &side, m)?;
-        let w = after_save(&app, sesi_of(&dir), Some(&dir));
+        let mut w = write_pictures(&dir, &side, true);
+        w.extend(after_save(&app, sesi_of(&dir), Some(&dir)));
         patient_info(&dd, &dir, w)
     })
     .await
@@ -548,6 +554,10 @@ struct ScanView {
     preview_h: u32,
     down: u32, // full-resolution pixels per preview pixel
     measurements: Option<measure::Measurements>,
+    /// The latest point check of this foot (None = not checked yet).
+    check: Option<session::PointCheck>,
+    /// Graded contact picture ("Peta kontak") at preview size, JPEG data URL, for the layer switch.
+    contact_preview: Option<String>,
 }
 
 const VIEW_DOWN: u32 = 4;
@@ -568,6 +578,13 @@ async fn get_scan_view(app: tauri::AppHandle, key: String, side: String) -> Resu
             preview_h: small.height(),
             down: VIEW_DOWN,
             measurements: e.measurements.clone(),
+            check: e.check.clone(),
+            contact_preview: image::open(dir.join(figures::contact_map_name(&side))).ok().and_then(|g| {
+                let g = image::imageops::resize(&g.to_rgb8(), small.width(), small.height(), image::imageops::FilterType::Triangle);
+                let mut b = Vec::new();
+                image::codecs::jpeg::JpegEncoder::new_with_quality(&mut b, 85).encode_image(&g).ok()?;
+                Some(format!("data:image/jpeg;base64,{}", base64::engine::general_purpose::STANDARD.encode(&b)))
+            }),
         })
     })
     .await
@@ -585,11 +602,160 @@ async fn remeasure(app: tauri::AppHandle, key: String, side: String, heel: Optio
         };
         let m = measure::measure_scan(&dir.join(session::raw_scan_name(&side)), &current_scale(), pts)?;
         session::set_measurements(&dir, &side, Some(m.clone()))?;
+        write_pictures(&dir, &side, false);
         after_save(&app, sesi_of(&dir), Some(&dir));
         Ok(m)
     })
     .await
     .map_err(|e| e.to_string())?
+}
+
+/// Pictures for one accepted scan. `scan_pictures` = also the scan-only ones (Peta kontak + Arsip
+/// analisis, frozen on the day); the arch-index picture follows the current measurements, the Clarke
+/// picture the confirmed check. Problems come back as warnings: a picture must never block a patient.
+fn write_pictures(dir: &Path, side: &str, scan_pictures: bool) -> Vec<String> {
+    let mut warn = vec![];
+    let Ok(p) = session::read_patient(dir) else { return warn };
+    let Some(e) = p.scans.iter().find(|e| e.side == side) else { return warn };
+    let scan = dir.join(&e.file);
+    if scan_pictures {
+        match figures::write_scan_images(dir, side, &scan) {
+            Ok(_) => {
+                if let Ok(mut p2) = session::read_patient(dir) {
+                    if let Some(e2) = p2.scans.iter_mut().find(|e| e.side == side) {
+                        e2.images_version = Some(env!("CARGO_PKG_VERSION").to_string());
+                    }
+                    let _ = session::write_patient(dir, &p2);
+                }
+            }
+            Err(er) => warn.push(format!("PICTURE: {er}")),
+        }
+    }
+    if let Some(m) = &e.measurements {
+        if let Err(er) = figures::write_arch_index_image(dir, side, &scan, m) {
+            warn.push(format!("PICTURE: {er}"));
+        }
+    }
+    if let Some(c) = e.check.as_ref().filter(|c| c.status == "diperiksa") {
+        if let (Some(pts), Some(deg)) = (&c.clarke_pts, c.clarke_deg) {
+            if let Err(er) = figures::write_clarke_image(dir, side, &scan, pts, deg) {
+                warn.push(format!("PICTURE: {er}"));
+            }
+        }
+    } else {
+        // an older confirmed picture must not outlive a newer unconfirmed state
+        let _ = std::fs::remove_file(dir.join(figures::clarke_name(side)));
+    }
+    warn
+}
+
+/// The operator on duty in the patient's session (falls back to the one who registered the patient).
+fn operator_now(dir: &Path, p: &Patient) -> String {
+    sesi_of(dir).and_then(|sd| session::read_sesi(sd).ok()).map(|s| s.operator).unwrap_or_else(|| p.operator.clone())
+}
+
+fn dist_mm(a: [f32; 2], b: [f32; 2], sc: &measure::Scale) -> f32 {
+    (((a[0] - b[0]) * sc.x_mm_per_px).powi(2) + ((a[1] - b[1]) * sc.y_mm_per_px).powi(2)).sqrt()
+}
+
+/// "Titik sudah benar": the operator confirms (after dragging, if needed) the AI heel-centre and
+/// second-toe points and Clarke's three points, full-resolution pixels. Moved AI points remeasure
+/// the foot; how far every point moved from the app's guess is recorded.
+#[tauri::command]
+async fn confirm_points(app: tauri::AppHandle, key: String, side: String, heel: [f32; 2], toe: [f32; 2], clarke: measure::ClarkePts) -> Result<PatientInfo, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let (dd, dir) = patient_dir(&app, &key)?;
+        let p = session::read_patient(&dir)?;
+        let e = p.scans.iter().find(|e| e.side == side).ok_or("scan not found")?;
+        let m = e.measurements.clone().ok_or("NO_FOOT: this scan has no measurements")?;
+        let sc = current_scale();
+        let ai_moved = [dist_mm(heel, m.heel_centre, &sc), dist_mm(toe, m.toe_tip, &sc)];
+        if ai_moved.iter().any(|&d| d > 0.5) {
+            let m2 = measure::measure_scan(&dir.join(&e.file), &sc, Some((heel, toe)))?;
+            session::set_measurements(&dir, &side, Some(m2))?;
+        }
+        let moved = m.clarke_pts.as_ref().map(|g| [dist_mm(clarke.fore, g.fore, &sc), dist_mm(clarke.heel, g.heel, &sc), dist_mm(clarke.arch, g.arch, &sc)]);
+        let check = session::PointCheck {
+            status: "diperiksa".into(),
+            skip_reason: None,
+            operator: operator_now(&dir, &p),
+            at: session::now_iso(),
+            clarke_deg: Some(measure::clarke_from_points(&clarke, &sc)),
+            clarke_pts: Some(clarke),
+            clarke_moved_mm: moved,
+            ai_moved_mm: Some(ai_moved),
+            guess_source: m.clarke_source.clone(),
+        };
+        session::set_check(&dir, &side, check)?;
+        let mut w = write_pictures(&dir, &side, false);
+        w.extend(after_save(&app, sesi_of(&dir), Some(&dir)));
+        patient_info(&dd, &dir, w)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// "Lewati": the operator skips the check, with one of session::SKIP_REASONS.
+#[tauri::command]
+async fn skip_points(app: tauri::AppHandle, key: String, side: String, reason: String) -> Result<PatientInfo, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let (dd, dir) = patient_dir(&app, &key)?;
+        let p = session::read_patient(&dir)?;
+        let m = p.scans.iter().find(|e| e.side == side).and_then(|e| e.measurements.clone());
+        let check = session::PointCheck {
+            status: "dilewati".into(),
+            skip_reason: Some(reason),
+            operator: operator_now(&dir, &p),
+            at: session::now_iso(),
+            clarke_pts: None,
+            clarke_deg: None,
+            clarke_moved_mm: None,
+            ai_moved_mm: None,
+            guess_source: m.and_then(|m| m.clarke_source),
+        };
+        session::set_check(&dir, &side, check)?;
+        let mut w = write_pictures(&dir, &side, false);
+        w.extend(after_save(&app, sesi_of(&dir), Some(&dir)));
+        patient_info(&dd, &dir, w)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[derive(Serialize)]
+struct UncheckedFoot {
+    key: String,
+    no: u32,
+    nama: String,
+    side: String,
+    /// "dilewati" (see skip_reason) or "belum" (never checked)
+    status: String,
+    skip_reason: Option<String>,
+}
+
+/// Feet in the open session whose points nobody has confirmed: for the reminder on "Akhiri sesi"
+/// and the "Belum diperiksa" filter.
+#[tauri::command]
+fn unchecked_feet(app: tauri::AppHandle) -> Result<Vec<UncheckedFoot>, String> {
+    let (dd, d, _) = open_sesi_dir(&app)?;
+    let mut out = vec![];
+    for (pd, p) in session::list_patients(&d) {
+        if p.cancelled {
+            continue;
+        }
+        for side in session::unchecked_sides(&p) {
+            let c = p.scans.iter().find(|e| e.side == side).and_then(|e| e.check.clone());
+            out.push(UncheckedFoot {
+                key: session::relative(&dd, &pd),
+                no: p.no,
+                nama: p.nama.clone(),
+                side,
+                status: c.as_ref().map(|c| c.status.clone()).unwrap_or_else(|| "belum".into()),
+                skip_reason: c.and_then(|c| c.skip_reason),
+            });
+        }
+    }
+    Ok(out)
 }
 
 #[tauri::command]
@@ -665,6 +831,9 @@ pub fn run() {
             retake_scan,
             get_scan_view,
             remeasure,
+            confirm_points,
+            skip_points,
+            unchecked_feet,
             save_inlow,
             save_notes,
             save_marks,

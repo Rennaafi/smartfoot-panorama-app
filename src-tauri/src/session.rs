@@ -368,6 +368,73 @@ pub struct ScanEntry {
     /// Filled in right after Accept; None if no foot could be measured.
     #[serde(default)]
     pub measurements: Option<Measurements>,
+    /// The operator's check of the reference points (None = not checked yet).
+    #[serde(default)]
+    pub check: Option<PointCheck>,
+    /// Earlier checks of this scan, oldest first (a later check replaces `check` and moves it here).
+    #[serde(default)]
+    pub check_history: Vec<PointCheck>,
+    /// App version that wrote the analysis images (Peta kontak + Arsip analisis) for this scan.
+    #[serde(default)]
+    pub images_version: Option<String>,
+}
+
+/// Reasons offered on the "Lewati" button (2026-11-18 agreement).
+pub const SKIP_REASONS: [&str; 3] = ["antrean panjang", "gambar kurang jelas", "lainnya"];
+
+/// One check of a foot's reference points by a person: Clarke's three points and the AI heel-centre /
+/// second-toe points, either confirmed ("diperiksa") or skipped ("dilewati", with a reason).
+/// Clarke's angle gets its flat/normal/cavus label only from a confirmed check.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct PointCheck {
+    /// "diperiksa" or "dilewati"
+    pub status: String,
+    #[serde(default)]
+    pub skip_reason: Option<String>,
+    pub operator: String,
+    pub at: String,
+    /// Final Clarke points and angle (confirmed checks only).
+    #[serde(default)]
+    pub clarke_pts: Option<crate::measure::ClarkePts>,
+    #[serde(default)]
+    pub clarke_deg: Option<f32>,
+    /// How far each point was moved from the app's first guess, mm: Clarke fore / heel / arch.
+    #[serde(default)]
+    pub clarke_moved_mm: Option<[f32; 3]>,
+    /// How far the AI heel-centre / second-toe points were moved from the automatic ones, mm.
+    #[serde(default)]
+    pub ai_moved_mm: Option<[f32; 2]>,
+    /// Where the app's guess came from at the time ("kontak" / "perkiraan").
+    #[serde(default)]
+    pub guess_source: Option<String>,
+}
+
+pub fn set_check(dir: &Path, side: &str, check: PointCheck) -> Result<Patient, String> {
+    if check.status == "dilewati" && !check.skip_reason.as_deref().is_some_and(|r| SKIP_REASONS.contains(&r)) {
+        return Err("BAD_INPUT: unknown skip reason".into());
+    }
+    let mut p = read_patient(dir)?;
+    let e = p.scans.iter_mut().find(|e| e.side == side).ok_or("scan not found in patient file")?;
+    if let Some(old) = e.check.take() {
+        e.check_history.push(old);
+    }
+    e.check = Some(check);
+    write_patient(dir, &p)?;
+    Ok(p)
+}
+
+/// Clarke's angle to report for a scan, and its status: a confirmed check gives the checked angle
+/// ("diperiksa"); anything else gives the app's guess ("otomatis"), which must not get a label.
+pub fn reported_clarke(e: &ScanEntry) -> (Option<f32>, &'static str) {
+    match &e.check {
+        Some(c) if c.status == "diperiksa" => (c.clarke_deg, "diperiksa"),
+        _ => (e.measurements.as_ref().and_then(|m| m.clarke_deg), "otomatis"),
+    }
+}
+
+/// Feet of a patient whose points nobody has confirmed (skipped or never checked).
+pub fn unchecked_sides(p: &Patient) -> Vec<String> {
+    p.scans.iter().filter(|e| e.measurements.is_some() && reported_clarke(e).1 != "diperiksa").map(|e| e.side.clone()).collect()
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq)]
@@ -584,6 +651,9 @@ fn record_accepted(dir: &Path, side: &str, name: &str, seconds: f64, w: u32, h: 
         accepted_at: now_iso(),
         warnings,
         measurements: None,
+        check: None,
+        check_history: vec![],
+        images_version: None,
     });
     p.scans.sort_by_key(|e| SIDES.iter().position(|s| *s == e.side));
     write_patient(dir, &p)
@@ -724,7 +794,7 @@ fn csv_field(s: &str) -> String {
 
 /// Rebuild the research CSV from every patient file, so it can never disagree with them.
 pub fn rebuild_csv(data_dir: &Path) -> Result<PathBuf, String> {
-    let mut out = String::from("sesi,tempat,no,id,nama,usia,kelamin,posisi,operator,side,attempt,file,rotated_180,calibrated,mm_per_px_x,mm_per_px_y,fl_mm,fw_mm,area_cm2,toeless_area_cm2,hind_cm2,mid_cm2,fore_cm2,ai,csi_pct,clarke_deg,toe_base_method,toeless_frac,points_corrected,warnings\n");
+    let mut out = String::from("sesi,tempat,no,id,nama,usia,kelamin,posisi,operator,side,attempt,file,rotated_180,calibrated,mm_per_px_x,mm_per_px_y,fl_mm,fw_mm,area_cm2,toeless_area_cm2,hind_cm2,mid_cm2,fore_cm2,ai,csi_pct,clarke_guess_deg,clarke_guess_source,toe_base_method,toeless_frac,points_corrected,contact_thr,contact_frac,contact_ai,contact_clarke_deg,check_status,skip_reason,checked_by,checked_at,clarke_checked_deg,clarke_moved_fore_mm,clarke_moved_heel_mm,clarke_moved_arch_mm,ai_moved_heel_mm,ai_moved_toe_mm,checks_total,warnings\n");
     for (sd, s) in list_sesi(data_dir) {
         for (_, p) in list_patients(&sd) {
             for e in &p.scans {
@@ -744,12 +814,32 @@ pub fn rebuild_csv(data_dir: &Path) -> Result<PathBuf, String> {
                         format!("{:.3}", m.ai),
                         format!("{:.1}", m.csi_pct),
                         m.clarke_deg.map(|c| format!("{c:.1}")).unwrap_or_default(),
+                        m.clarke_source.clone().unwrap_or_default(),
                         m.toe_base_method.clone(),
                         format!("{:.3}", m.toeless_frac),
                         m.corrected.to_string(),
                     ]),
-                    None => f.extend(std::iter::repeat_n(String::new(), 16)),
+                    None => f.extend(std::iter::repeat_n(String::new(), 17)),
                 }
+                let c = e.measurements.as_ref().and_then(|m| m.contact.as_ref());
+                let n1 = |v: Option<f32>, d: usize| v.map(|x| format!("{x:.d$}")).unwrap_or_default();
+                f.extend([n1(c.map(|c| c.thr), 3), n1(c.map(|c| c.frac), 3), n1(c.map(|c| c.ai), 3), n1(c.and_then(|c| c.clarke_deg), 1)]);
+                let k = e.check.as_ref();
+                let mv = |i: usize| n1(k.and_then(|k| k.clarke_moved_mm).map(|v| v[i]), 1);
+                let mva = |i: usize| n1(k.and_then(|k| k.ai_moved_mm).map(|v| v[i]), 1);
+                f.extend([
+                    k.map(|k| k.status.clone()).unwrap_or_else(|| "belum".into()),
+                    k.and_then(|k| k.skip_reason.clone()).unwrap_or_default(),
+                    k.map(|k| k.operator.clone()).unwrap_or_default(),
+                    k.map(|k| k.at.clone()).unwrap_or_default(),
+                    n1(k.and_then(|k| k.clarke_deg), 1),
+                    mv(0),
+                    mv(1),
+                    mv(2),
+                    mva(0),
+                    mva(1),
+                    (e.check_history.len() + k.is_some() as usize).to_string(),
+                ]);
                 f.push(e.warnings.join(";"));
                 out.push_str(&f.iter().map(|x| csv_field(x)).collect::<Vec<_>>().join(","));
                 out.push('\n');
@@ -995,5 +1085,39 @@ mod tests {
         assert_eq!(csv_field("@SUM(A1)"), "'@SUM(A1)");
         assert_eq!(csv_field("-5"), "-5");
         assert_eq!(csv_field("a,\"b\""), "\"a,\"\"b\"\"\"");
+    }
+
+    #[test]
+    fn point_checks_keep_their_history_and_reasons_are_checked() {
+        let d = tmp("checks");
+        let (sd, _) = start_sesi(&d, "X", "Rina", "7MY").unwrap();
+        let dir = create_patient(&sd, &form("Siti"), "dev").unwrap();
+        let mut p = read_patient(&dir).unwrap();
+        p.scans.push(ScanEntry { file: raw_scan_name("left"), side: "left".into(), attempt: 1, seconds: 1.0, width_px: 1, height_px: 1, dpi: 300, rotated_180: false, accepted_at: now_iso(), warnings: vec![], measurements: None, check: None, check_history: vec![], images_version: None });
+        write_patient(&dir, &p).unwrap();
+        let chk = |status: &str, reason: Option<&str>, deg: Option<f32>| PointCheck { status: status.into(), skip_reason: reason.map(Into::into), operator: "Rina".into(), at: now_iso(), clarke_pts: None, clarke_deg: deg, clarke_moved_mm: None, ai_moved_mm: None, guess_source: Some("kontak".into()) };
+        assert!(set_check(&dir, "left", chk("dilewati", Some("bosan"), None)).is_err(), "unknown reason refused");
+        assert!(set_check(&dir, "left", chk("dilewati", None, None)).is_err(), "skip needs a reason");
+        set_check(&dir, "left", chk("dilewati", Some("antrean panjang"), None)).unwrap();
+        let p = set_check(&dir, "left", chk("diperiksa", None, Some(36.0))).unwrap();
+        let e = &p.scans[0];
+        assert_eq!(e.check.as_ref().unwrap().status, "diperiksa");
+        assert_eq!(e.check_history.len(), 1);
+        assert_eq!(e.check_history[0].skip_reason.as_deref(), Some("antrean panjang"));
+        assert_eq!(reported_clarke(e), (Some(36.0), "diperiksa"));
+        // a later correction by the team keeps both earlier checks
+        let p = set_check(&dir, "left", chk("diperiksa", None, Some(33.5))).unwrap();
+        assert_eq!(p.scans[0].check_history.len(), 2);
+        assert_eq!(reported_clarke(&p.scans[0]).0, Some(33.5));
+        // and the research CSV says so
+        rebuild_csv(&d).unwrap();
+        let csv = std::fs::read_to_string(d.join(RESEARCH_CSV)).unwrap();
+        let head: Vec<&str> = csv.lines().next().unwrap().trim_start_matches('\u{feff}').split(',').collect();
+        let row: Vec<&str> = csv.lines().nth(1).unwrap().split(',').collect();
+        assert_eq!(head.len(), row.len(), "{csv}");
+        let col = |n: &str| row[head.iter().position(|h| *h == n).unwrap()];
+        assert_eq!(col("check_status"), "diperiksa");
+        assert_eq!(col("clarke_checked_deg"), "33.5");
+        assert_eq!(col("checks_total"), "3");
     }
 }
