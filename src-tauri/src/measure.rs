@@ -139,6 +139,43 @@ pub struct ContactMeasure {
 /// part t_lo..t_hi. `side` = +1 or -1, the s direction of the medial (big-toe) border.
 /// Returns (angle in degrees, [fore, heel, arch] as (t, s), arch depth in mm).
 fn clarke(ts: &[f32], ss: &[f32], t_lo: f32, t_hi: f32, side: f32) -> Option<(f32, [P; 3], f32)> {
+    let (e, h1, f1) = medial_tangent(ts, ss, t_lo, t_hi, side)?;
+    let nb = e.len();
+    // deepest point under the tangent; an empty slice means the arch has no contact at all
+    let (k0, k1) = (h1[0] as usize, f1[0] as usize);
+    let slope = (f1[1] - h1[1]) / (f1[0] - h1[0]);
+    // The deepest point is looked for in the middle third only: a ragged pocket of unpressed skin just
+    // behind the ball (seen on 18 Nov scan L3) is not the arch.
+    let (m0, m1) = (k0.max(nb / 3), k1.min(2 * nb / 3).min(nb - 1));
+    let mut best = (0f32, (m0 + m1) / 2);
+    for k in k0..=k1.min(nb - 1) {
+        if e[k] == f32::MIN {
+            return None;
+        }
+        let depth = (h1[1] + slope * (k as f32 + 0.5 - h1[0])) - e[k];
+        if (m0..=m1).contains(&k) && depth > best.0 {
+            best = (depth, k);
+        }
+    }
+    let arch = [best.1 as f32 + 0.5, e[best.1]];
+    let (u, v) = (sub(h1, f1), sub(arch, f1));
+    let cos = dot(u, v) / (dot(u, u).sqrt() * dot(v, v).sqrt()).max(1e-6);
+    let deg = cos.clamp(-1.0, 1.0).acos().to_degrees();
+    let back = |p: P| [p[0] + t_lo, side * p[1]];
+    Some((deg, [back(f1), back(h1), back(arch)], best.0))
+}
+
+/// The medial tangent alone, as (fore, heel) in the foot frame (t, s). Unlike `clarke` it works on a
+/// split print: the tangent only needs the heel and the ball to be there.
+fn tangent_points(ts: &[f32], ss: &[f32], t_lo: f32, t_hi: f32, side: f32) -> Option<[P; 2]> {
+    let (_, h1, f1) = medial_tangent(ts, ss, t_lo, t_hi, side)?;
+    let back = |p: P| [p[0] + t_lo, side * p[1]];
+    Some([back(f1), back(h1)])
+}
+
+/// Medial edge profile (1 mm slices from t_lo, side * s, `f32::MIN` = nothing in that slice) and the
+/// hull edge that rests on heel and forefoot (first and last ~40 %), in profile coordinates.
+fn medial_tangent(ts: &[f32], ss: &[f32], t_lo: f32, t_hi: f32, side: f32) -> Option<(Vec<f32>, P, P)> {
     let nb = (t_hi - t_lo).floor() as usize;
     if nb < 30 {
         return None;
@@ -176,28 +213,7 @@ fn clarke(ts: &[f32], ss: &[f32], t_lo: f32, t_hi: f32, side: f32) -> Option<(f3
     if h1[0] > 0.4 * nb as f32 || f1[0] < 0.6 * nb as f32 {
         return None;
     }
-    // deepest point under the tangent; an empty slice means the arch has no contact at all
-    let (k0, k1) = (h1[0] as usize, f1[0] as usize);
-    let slope = (f1[1] - h1[1]) / (f1[0] - h1[0]);
-    // The deepest point is looked for in the middle third only: a ragged pocket of unpressed skin just
-    // behind the ball (seen on 18 Nov scan L3) is not the arch.
-    let (m0, m1) = (k0.max(nb / 3), k1.min(2 * nb / 3).min(nb - 1));
-    let mut best = (0f32, (m0 + m1) / 2);
-    for k in k0..=k1.min(nb - 1) {
-        if e[k] == f32::MIN {
-            return None;
-        }
-        let depth = (h1[1] + slope * (k as f32 + 0.5 - h1[0])) - e[k];
-        if (m0..=m1).contains(&k) && depth > best.0 {
-            best = (depth, k);
-        }
-    }
-    let arch = [best.1 as f32 + 0.5, e[best.1]];
-    let (u, v) = (sub(h1, f1), sub(arch, f1));
-    let cos = dot(u, v) / (dot(u, u).sqrt() * dot(v, v).sqrt()).max(1e-6);
-    let deg = cos.clamp(-1.0, 1.0).acos().to_degrees();
-    let back = |p: P| [p[0] + t_lo, side * p[1]];
-    Some((deg, [back(f1), back(h1), back(arch)], best.0))
+    Some((e, h1, f1))
 }
 
 /// Clarke's angle in words, the client's table (17 Nov 2026): below 31 flat, 31-41 normal, above 41
@@ -384,7 +400,7 @@ pub fn measure_masks(mask: &[bool], contact: Option<(&[bool], f32)>, w: usize, h
     let side = medial.map(|m| m.0).unwrap_or(1.0);
 
     // the contact map on the same frame and thirds
-    let contact = contact.map(|(cm, thr)| {
+    let contact_both = contact.map(|(cm, thr)| {
         let (mut ct, mut cs) = (Vec::new(), Vec::new());
         for y in 0..h {
             for x in 0..w {
@@ -401,7 +417,8 @@ pub fn measure_masks(mask: &[bool], contact: Option<(&[bool], f32)>, w: usize, h
         }
         let (ha, hb, hcn) = (ka * to_cm2, kb * to_cm2, kc * to_cm2);
         let cl = clarke(&ct, &cs, t_min, t_base, side);
-        ContactMeasure {
+        let tangent = tangent_points(&ct, &cs, t_min, t_base, side);
+        let m = ContactMeasure {
             thr,
             frac: ct.len() as f32 / call.max(1.0),
             area_cm2: ct.len() as f32 * to_cm2,
@@ -412,23 +429,32 @@ pub fn measure_masks(mask: &[bool], contact: Option<(&[bool], f32)>, w: usize, h
             ai: if ha + hb + hcn > 0.0 { hb / (ha + hb + hcn) } else { 0.0 },
             clarke_deg: cl.map(|c| c.0),
             clarke_pts: cl.map(|c| pts3(c.1)),
-        }
+        };
+        (m, tangent)
     });
+    let (contact, contact_tangent) = match contact_both {
+        Some((m, t)) => (Some(m), t),
+        None => (None, None),
+    };
 
     // The app's first guess for the operator (2026-11-18 agreement): the contact-map construction
-    // when there is one; otherwise a rough default on the outline's medial tangent with the arch point
-    // in the middle of the toeless foot, halfway between the tangent and the foot axis. The outline's
-    // own Clarke (5-9 degrees on every real foot, the blurred outline includes the lifted arch) is
-    // never reported.
+    // when there is one; otherwise a rough default with the arch point in the middle of the toeless
+    // foot, halfway between the tangent and the foot axis. The rough default's tangent comes from the
+    // pressed ball and heel when the contact map has them (a split print, e.g. every standing right
+    // foot on 18 Nov), else from the outline. The outline's own Clarke (5-9 degrees on every real
+    // foot, the blurred outline includes the lifted arch) is never reported.
+    let rough = |fore: P, heel: P| {
+        let tm = t_min + lt / 2.0;
+        let s_tan = heel[1] + (fore[1] - heel[1]) * (tm - heel[0]) / (fore[0] - heel[0]).max(1e-3);
+        let p = pts3([fore, heel, [tm, s_tan / 2.0]]);
+        (clarke_from_points(&p, scale), p, "perkiraan")
+    };
     let guess: Option<(f32, ClarkePts, &str)> = match contact.as_ref().and_then(|c| c.clarke_pts.clone()) {
         Some(p) => Some((clarke_from_points(&p, scale), p, "kontak")),
-        None => medial.map(|(_, (_, p3, _))| {
-            let (fore, heel) = (p3[0], p3[1]);
-            let tm = t_min + lt / 2.0;
-            let s_tan = heel[1] + (fore[1] - heel[1]) * (tm - heel[0]) / (fore[0] - heel[0]).max(1e-3);
-            let p = pts3([fore, heel, [tm, s_tan / 2.0]]);
-            (clarke_from_points(&p, scale), p, "perkiraan")
-        }),
+        None => match contact_tangent {
+            Some([fore, heel]) => Some(rough(fore, heel)),
+            None => medial.map(|(_, (_, p3, _))| rough(p3[0], p3[1])),
+        },
     };
 
     Some(Measurements {
@@ -647,6 +673,17 @@ mod tests {
     fn split_contact_has_no_clarke_angle() {
         let (ts, ss) = clarke_points(true);
         assert!(clarke(&ts, &ss, 0.0, 200.0, 1.0).is_none());
+    }
+
+    #[test]
+    fn split_contact_still_has_the_medial_tangent() {
+        // the rough guess on a split print rests on the pressed heel and ball, as on the whole print
+        let (ts, ss) = clarke_points(true);
+        let [fore, heel] = tangent_points(&ts, &ss, 0.0, 200.0, 1.0).expect("tangent");
+        assert!((fore[0] - 150.0).abs() < 2.0 && (heel[0] - 50.0).abs() < 2.0, "{fore:?} {heel:?}");
+        assert!((fore[1] - 40.0).abs() < 1.0 && (heel[1] - 40.0).abs() < 1.0, "{fore:?} {heel:?}");
+        let (_, whole, _) = clarke(&clarke_points(false).0, &clarke_points(false).1, 0.0, 200.0, 1.0).unwrap();
+        assert!((whole[0][0] - fore[0]).abs() < 1.0 && (whole[1][0] - heel[0]).abs() < 1.0);
     }
 
     #[test]

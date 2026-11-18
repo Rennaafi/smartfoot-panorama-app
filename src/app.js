@@ -59,6 +59,7 @@ const T = {
     aiNow: "Arch Index (garis tepi)", aiLater: "dihitung ulang setelah konfirmasi bila titik putih digeser",
     moved: "titik digeser", reset: "Kembalikan otomatis", confirm: "✓ Titik sudah benar", skip: "Lewati",
     skipQ: "Alasan melewati pemeriksaan:", skipR: { "antrean panjang": "Antrean panjang", "gambar kurang jelas": "Gambar kurang jelas", "lainnya": "Lainnya" },
+    roughWarn: "Titik oranye belum digeser dari tebakan kasar aplikasi. Tebakan kasar hampir selalu salah di titik lengkung. Periksa lagi, atau tekan sekali lagi jika titik memang sudah benar.", roughOk: "✓ Ya, titik sudah benar",
     skipNote: "Kaki ini akan tercatat \"belum diperiksa\" dan bisa diperiksa nanti di Detail pengukuran.",
     lyOutline: "Garis tepi", lyAI: "Indeks lengkung", lyClarke: "Sudut Clarke", lyContact: "Peta kontak", lyMarks: "Tanda manual",
     contactCap: "Hijau terang = tertekan kuat, hijau redup = tertekan ringan.",
@@ -179,6 +180,7 @@ const T = {
     aiNow: "Arch Index (outline)", aiLater: "recalculated after confirming if a white point was moved",
     moved: "points moved", reset: "Reset to automatic", confirm: "✓ Points are right", skip: "Skip",
     skipQ: "Reason for skipping the check:", skipR: { "antrean panjang": "Long queue", "gambar kurang jelas": "Image not clear", "lainnya": "Other" },
+    roughWarn: "The orange points have not been moved from the app's rough guess. The rough guess is nearly always wrong at the arch point. Check again, or press once more if the points really are right.", roughOk: "✓ Yes, the points are right",
     skipNote: "This foot is recorded as \"not checked\" and can be checked later in Measurement details.",
     lyOutline: "Outline", lyAI: "Arch index", lyClarke: "Clarke's angle", lyContact: "Contact map", lyMarks: "Manual marks",
     contactCap: "Bright green = pressed firmly, dim green = pressed lightly.",
@@ -887,7 +889,7 @@ async function openCheck(side, outline, back) {
     const auto = { fore: [...g.fore], heel: [...g.heel], arch: [...g.arch], hc: [...m.heel_centre], toe: [...m.toe_tip] };
     const last = v.check?.status === "diperiksa" ? v.check.clarke_pts : null;
     Object.assign(ck, {
-      side, view: v, outline, auto, skipOpen: false, back: back ?? null,
+      side, view: v, outline, auto, skipOpen: false, back: back ?? null, roughArmed: false,
       pts: last ? { fore: [...last.fore], heel: [...last.heel], arch: [...last.arch], hc: [...m.heel_centre], toe: [...m.toe_tip] } : JSON.parse(JSON.stringify(auto)),
       layers: { outline: !!outline, ai: false, clarke: true, contact: false, marks: false },
     });
@@ -943,6 +945,12 @@ function checkSvg() {
     <circle id="lensring" r="95" fill="none" stroke="#fff" stroke-width="4"/><path id="lensx" stroke="#ffb703" stroke-width="2" fill="none"/></g>`;
   return `<svg id="cksvg" viewBox="0 0 ${v.preview_w} ${v.preview_h}" style="touch-action:none"><image href="${base}" width="${v.preview_w}" height="${v.preview_h}"/>${g}</svg>`;
 }
+// the orange points still sit on the app's rough guess (not the contact construction)
+function roughUntouched() {
+  if (ck.view.measurements.clarke_source === "kontak") return false;
+  const sc = ck.view.measurements.scale, dmm = (a, b) => Math.hypot((a[0] - b[0]) * sc.x_mm_per_px, (a[1] - b[1]) * sc.y_mm_per_px);
+  return ["fore", "heel", "arch"].every((k) => dmm(ck.pts[k], ck.auto[k]) <= 0.5);
+}
 function movedCount() {
   const sc = ck.view.measurements.scale, dmm = (a, b) => Math.hypot((a[0] - b[0]) * sc.x_mm_per_px, (a[1] - b[1]) * sc.y_mm_per_px);
   return ["fore", "heel", "arch", "hc", "toe"].filter((k) => dmm(ck.pts[k], ck.auto[k]) > 0.5).length;
@@ -972,6 +980,7 @@ function wireCheckDrag() {
       const q = toSvg(e), p = [Math.min(Math.max(q.x, 0), v.preview_w), Math.min(Math.max(q.y, 0), v.preview_h)];
       ck.pts[ck.drag] = [p[0] * d, p[1] * d];
       moveHandle(h, p); lens(p); paintCheckLines(); paintCheckNums();
+      if (ck.roughArmed && !roughUntouched()) { ck.roughArmed = false; const okb = $("#ck_ok"); okb.textContent = t("confirm"); okb.parentElement.nextElementSibling?.classList.contains("warn") && okb.parentElement.nextElementSibling.remove(); }
     };
     h.onpointerup = h.onpointercancel = () => { if (ck.drag !== h.dataset.p) return; ck.drag = null; h.classList.remove("on"); lens(null); };
   });
@@ -1007,12 +1016,13 @@ function checkScreen(m) {
     <div class="card"><p class="cklegend"><span class="sw o"></span>${t("chkClarke")}</p><p class="cklegend"><span class="sw w"></span>${t("chkAxis")}</p>
       <div id="cknums"></div>
       <div class="row" style="margin-top:18px"><button class="btn ghost" id="ck_reset" style="${sbtn}">↺ ${t("reset")}</button></div>
-      <div class="row" style="margin-top:18px"><button class="btn ghost" id="ck_skip" style="${sbtn}">${t("skip")}</button><button class="btn ok right" id="ck_ok">${t("confirm")}</button></div>
+      <div class="row" style="margin-top:18px"><button class="btn ghost" id="ck_skip" style="${sbtn}">${t("skip")}</button><button class="btn ok right" id="ck_ok">${ck.roughArmed ? t("roughOk") : t("confirm")}</button></div>
+      ${ck.roughArmed ? `<div class="warn">${t("roughWarn")}</div>` : ""}
       ${ck.back ? `<div class="row" style="margin-top:18px"><button class="btn ghost" id="ck_back" style="${sbtn}">${t("back")}</button></div>` : ""}
       ${ck.skipOpen ? `<div class="skipbox"><div style="font-weight:700;margin-bottom:10px">${t("skipQ")}</div><div class="row">${Object.entries(t("skipR")).map(([k, lab]) => `<button class="btn ghost" data-skip="${k}" style="${sbtn}">${lab}</button>`).join("")}</div><p class="muted" style="margin-top:10px">${t("skipNote")}</p></div>` : ""}</div></div>`;
   paintCheckNums(); wireCheckDrag();
   m.querySelectorAll("[data-ly]").forEach((c) => (c.onchange = () => { Y[c.dataset.ly] = c.checked; render(); }));
-  $("#ck_reset").onclick = () => { ck.pts = JSON.parse(JSON.stringify(ck.auto)); render(); };
+  $("#ck_reset").onclick = () => { ck.pts = JSON.parse(JSON.stringify(ck.auto)); ck.roughArmed = false; render(); };
   $("#ck_skip").onclick = () => { ck.skipOpen = !ck.skipOpen; render(); };
   if ($("#ck_back")) $("#ck_back").onclick = () => { const b = ck.back; ck.back = null; b(); };
   const done = (info, text) => {
@@ -1026,6 +1036,7 @@ function checkScreen(m) {
     catch (e) { st.error = e; render(); }
   }));
   $("#ck_ok").onclick = async () => {
+    if (roughUntouched() && !ck.roughArmed) { ck.roughArmed = true; render(); return; }
     const b = $("#ck_ok"); b.disabled = true; b.textContent = t("saving");
     const P = ck.pts, deg = clarkeDeg(P, v.measurements.scale);
     try {
