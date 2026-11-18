@@ -49,6 +49,20 @@ const T = {
     wTwo: "Ada benda kedua di kaca. Hanya satu yang diberi garis. Singkirkan benda lain, lalu ulangi.",
     accept: "Terima", acceptAnyway: "Tetap terima", retake: "Ulangi", saving: "Menyimpan…",
     cancelP: "Batalkan pasien", cancelSure: "Yakin? Tekan lagi untuk batal",
+    // point check
+    chk: "Periksa titik", chkSub: "Seret titik yang belum tepat. Tahan titik untuk melihat kaca pembesar.",
+    chkClarke: "Titik oranye = sudut Clarke: tepi dalam kaki depan, tepi dalam tumit, dan titik terdalam lengkung.",
+    chkAxis: "Titik putih = sumbu kaki untuk Arch Index: pusat tumit dan ujung jari ke-2.",
+    lFore: "depan", lHeel: "tumit", lArch: "lengkung", lHc: "pusat tumit", lToe: "jari ke-2",
+    clarke: "Sudut Clarke", guessK: "Tebakan aplikasi dari peta kontak", guessP: "Tebakan kasar aplikasi (peta kontak tidak cukup jelas)",
+    noLabel: "Label datar / normal / tinggi baru diberikan setelah titik diperiksa.",
+    aiNow: "Arch Index (garis tepi)", aiLater: "dihitung ulang setelah konfirmasi bila titik putih digeser",
+    moved: "titik digeser", reset: "Kembalikan otomatis", confirm: "✓ Titik sudah benar", skip: "Lewati",
+    skipQ: "Alasan melewati pemeriksaan:", skipR: { "antrean panjang": "Antrean panjang", "gambar kurang jelas": "Gambar kurang jelas", "lainnya": "Lainnya" },
+    skipNote: "Kaki ini akan tercatat \"belum diperiksa\" dan bisa diperiksa nanti di Detail pengukuran.",
+    lyOutline: "Garis tepi", lyAI: "Indeks lengkung", lyClarke: "Sudut Clarke", lyContact: "Peta kontak", lyMarks: "Tanda manual",
+    contactCap: "Hijau terang = tertekan kuat, hijau redup = tertekan ringan.",
+    lbl: { datar: "datar", normal: "normal", tinggi: "tinggi" }, okChk: "diperiksa", okSkip: "dilewati",
     // INLOW
     inlow: "Formulir INLOW", inlowSub: "Ketuk satu pilihan per kaki. Ketuk lagi untuk menghapus. Boleh disimpan walau belum lengkap.",
     kanan: "Kaki kanan", kiri: "Kaki kiri", filled: "terisi", total: "Total", qOpen: "4 pertanyaan", yes: "Ya", no: "Tidak",
@@ -152,6 +166,19 @@ const T = {
     wTwo: "There is a second object on the glass. Only one is outlined. Remove the other object, then retake.",
     accept: "Accept", acceptAnyway: "Accept anyway", retake: "Retake", saving: "Saving…",
     cancelP: "Cancel patient", cancelSure: "Sure? Press again to cancel",
+    chk: "Check the points", chkSub: "Drag any point that is not right. Hold a point to see the magnifier.",
+    chkClarke: "Orange points = Clarke's angle: inner edge of the forefoot, inner edge of the heel, and the deepest point of the arch.",
+    chkAxis: "White points = foot axis for the Arch Index: heel centre and 2nd-toe tip.",
+    lFore: "forefoot", lHeel: "heel", lArch: "arch", lHc: "heel centre", lToe: "2nd toe",
+    clarke: "Clarke's angle", guessK: "App's guess from the contact map", guessP: "App's rough guess (the contact map was not clear enough)",
+    noLabel: "The flat / normal / high label is only given after the points are checked.",
+    aiNow: "Arch Index (outline)", aiLater: "recalculated after confirming if a white point was moved",
+    moved: "points moved", reset: "Reset to automatic", confirm: "✓ Points are right", skip: "Skip",
+    skipQ: "Reason for skipping the check:", skipR: { "antrean panjang": "Long queue", "gambar kurang jelas": "Image not clear", "lainnya": "Other" },
+    skipNote: "This foot is recorded as \"not checked\" and can be checked later in Measurement details.",
+    lyOutline: "Outline", lyAI: "Arch index", lyClarke: "Clarke's angle", lyContact: "Contact map", lyMarks: "Manual marks",
+    contactCap: "Bright green = pressed firmly, dim green = pressed lightly.",
+    lbl: { datar: "flat", normal: "normal", tinggi: "high" }, okChk: "checked", okSkip: "skipped",
     inlow: "INLOW form", inlowSub: "Tap one choice per foot. Tap again to clear it. It may be saved incomplete.",
     kanan: "Right foot", kiri: "Left foot", filled: "filled in", total: "Total", qOpen: "4 questions", yes: "Yes", no: "No",
     qNote: "When all four questions are answered, the value above is filled in automatically.",
@@ -317,7 +344,7 @@ function noteScanError(e) { if (String(e).startsWith("LOCKED")) { sc.lock = true
 const st = {
   screen: "boot", prev: "home", sesi: null, pat: null, side: null, scan: null, error: "", busy: false, scanning: false,
   settings: null, draft: {}, flash: null, ferr: null, scanners: [], damaged: [], warn: [], spec: null,
-  home: { place: "", op: "" }, form: null, editBack: null, inl: null, inlDirty: false, nt: null, ntDirty: false, views: {},
+  home: { place: "", op: "" }, notice: null, form: null, editBack: null, inl: null, inlDirty: false, nt: null, ntDirty: false, views: {},
 };
 // text fields in Settings with their own Save button: current value and "unchanged" test
 const FIELDS = {
@@ -365,11 +392,11 @@ const blankFoot = () => ({ items: {}, questions: [null, null, null, null] });
 const copyInlow = (i) => ({ kanan: { items: { ...(i?.kanan?.items ?? {}) }, questions: [...(i?.kanan?.questions ?? [null, null, null, null])] }, kiri: { items: { ...(i?.kiri?.items ?? {}) }, questions: [...(i?.kiri?.questions ?? [null, null, null, null])] } });
 
 // ---- step bar: the patient's six steps; clickable once the patient exists ----
-const PATIENT_SCREENS = ["pform", "scan", "turn", "review", "inlow", "notes", "finished"];
+const PATIENT_SCREENS = ["pform", "scan", "turn", "review", "check", "inlow", "notes", "finished"];
 function stepIndex() {
   switch (st.screen) {
     case "pform": return 0;
-    case "scan": case "review": return st.side === "left" ? 1 : 2;
+    case "scan": case "review": case "check": return st.side === "left" ? 1 : 2;
     case "turn": return 2;
     case "inlow": return 3;
     case "notes": return 4;
@@ -383,7 +410,7 @@ function stepDone(i) {
 }
 function stepReachable(i) {
   const p = st.pat?.patient;
-  if (!p || !PATIENT_SCREENS.includes(st.screen) || st.screen === "review" || st.scanning || st.busy || i === stepIndex()) return false;
+  if (!p || !PATIENT_SCREENS.includes(st.screen) || st.screen === "review" || st.screen === "check" || st.scanning || st.busy || i === stepIndex()) return false;
   if (i === 1 || i === 2) return st.pat.next_side === (i === 1 ? "left" : "right");
   if (i === 5) return !st.pat.next_side;
   return true;
@@ -774,7 +801,7 @@ function scanScreen(m) {
 }
 
 function turnScreen(m) {
-  m.innerHTML = `<h1>${t("turn")}</h1><p class="sub">${t("turnSub")}</p>${warnBox()}${errBox()}<div class="card"><div class="row" style="gap:36px;flex-wrap:nowrap">
+  m.innerHTML = `<h1>${t("turn")}</h1><p class="sub">${t("turnSub")}</p>${noticeBox()}${warnBox()}${errBox()}<div class="card"><div class="row" style="gap:36px;flex-wrap:nowrap">
     <div style="flex:0 0 260px">${turnPic}</div><div style="flex:1"><div class="pname">${String(st.pat.patient.no).padStart(3, "0")} · ${esc(st.pat.patient.nama)}</div>
     <p style="font-size:20px;line-height:1.5;margin:14px 0 26px">${t("turnSub")}</p><button class="btn" id="tgo">${t("turnGo")}</button></div></div></div>`;
   $("#tgo").onclick = () => { st.side = "right"; st.scan = null; st.error = ""; st.screen = "scan"; render(); };
@@ -805,13 +832,180 @@ function reviewScreen(m) {
     $("#accept").disabled = true; $("#accept").textContent = t("saving"); $("#retake").disabled = true;
     try {
       st.pat = takeWarn(await invoke("accept_scan", { key: st.pat.key, side, seconds: s.seconds, widthPx: s.width_px, heightPx: s.height_px, warnings: w }));
-      st.scan = null; st.error = "";
-      const next = st.pat.next_side;
-      if (next === "right") { st.side = "right"; st.screen = "turn"; }
-      else if (next === "left") { st.side = "left"; st.screen = "scan"; }
-      else openInlow();
+      const outline = s.preview; st.scan = null; st.error = "";
+      if (s.measurements) { await openCheck(side, outline); return; }
+      afterFoot();
     } catch (e) { st.error = e; }
     render();
+  };
+}
+
+// ---- point check ("Periksa titik"): right after each foot is accepted ----
+// Clarke's three points (orange) and the AI heel-centre / 2nd-toe points (white) are dragged on the
+// scan; "Titik sudah benar" saves them (confirm_points), "Lewati" records a reason (skip_points).
+// Only a confirmed check gives Clarke's angle its flat / normal / high label (in Rust and Excel).
+const ck = { side: null, view: null, outline: null, pts: null, auto: null, layers: null, skipOpen: false, drag: null, back: null };
+const clarkeLabel = (deg) => (deg < 31 ? "datar" : deg <= 41 ? "normal" : "tinggi"); // same as measure::clarke_label
+function clarkeDeg(P, sc) {
+  const mm = (q) => [q[0] * sc.x_mm_per_px, q[1] * sc.y_mm_per_px];
+  const f = mm(P.fore), h = mm(P.heel), a = mm(P.arch), u = [h[0] - f[0], h[1] - f[1]], v = [a[0] - f[0], a[1] - f[1]];
+  const c = (u[0] * v[0] + u[1] * v[1]) / Math.max(1e-6, Math.hypot(...u) * Math.hypot(...v));
+  return (Math.acos(Math.max(-1, Math.min(1, c))) * 180) / Math.PI;
+}
+// back = optional function to run after confirm/skip instead of moving on in the patient flow
+async function openCheck(side, outline, back) {
+  try {
+    const v = await invoke("get_scan_view", { key: st.pat.key, side });
+    const m = v.measurements;
+    if (!m) { afterFoot(); return; }
+    // rough fallback if the backend had no Clarke guess: tangent from toe base to heel end, arch midway
+    const g = m.clarke_pts ?? { fore: m.toe_base, heel: m.heel_end, arch: [(m.toe_base[0] + m.heel_end[0]) / 2, (m.toe_base[1] + m.heel_end[1]) / 2] };
+    const auto = { fore: [...g.fore], heel: [...g.heel], arch: [...g.arch], hc: [...m.heel_centre], toe: [...m.toe_tip] };
+    const last = v.check?.status === "diperiksa" ? v.check.clarke_pts : null;
+    Object.assign(ck, {
+      side, view: v, outline, auto, skipOpen: false, back: back ?? null,
+      pts: last ? { fore: [...last.fore], heel: [...last.heel], arch: [...last.arch], hc: [...m.heel_centre], toe: [...m.toe_tip] } : JSON.parse(JSON.stringify(auto)),
+      layers: { outline: !!outline, ai: false, clarke: true, contact: false, marks: false },
+    });
+    st.side = side; st.screen = "check"; st.error = "";
+  } catch (e) { st.error = e; }
+  render();
+}
+// where the patient goes once a foot is accepted and checked (or skipped)
+function afterFoot() {
+  const next = st.pat.next_side;
+  if (next === "right") { st.side = "right"; st.screen = "turn"; }
+  else if (next === "left") { st.side = "left"; st.screen = "scan"; }
+  else openInlow();
+  render();
+}
+const noticeBox = () => { const n = st.notice; st.notice = null; return n ? `<div class="okbox">${n}</div>` : ""; };
+const degText = (d) => num(d, 1) + "°";
+
+function checkSvg() {
+  const v = ck.view, m = v.measurements, d = v.down, P = ck.pts, Y = ck.layers;
+  const q = (p) => [p[0] / d, p[1] / d];
+  const [F, Hl, A, HC, J] = [q(P.fore), q(P.heel), q(P.arch), q(P.hc), q(P.toe)];
+  let g = "";
+  if (Y.contact && v.contact_preview) g += `<image href="${v.contact_preview}" width="${v.preview_w}" height="${v.preview_h}" style="mix-blend-mode:screen" opacity=".95"/>`;
+  if (Y.ai) { // Cavanagh thirds from the automatic measurement (they move only after confirming)
+    const E = q(m.heel_end), T0 = q(m.toe_tip), l = Math.hypot(T0[0] - E[0], T0[1] - E[1]) || 1, a = [(T0[0] - E[0]) / l, (T0[1] - E[1]) / l], b = [-a[1], a[0]];
+    const ppm = 1 / (m.scale.x_mm_per_px * d), half = (m.fw_mm / 2) * 1.15 * ppm, Lt = m.toeless_frac * m.fl_mm * ppm;
+    for (let i = 0; i <= 3; i++) {
+      const C = [E[0] + a[0] * Lt * i / 3, E[1] + a[1] * Lt * i / 3];
+      g += `<line x1="${C[0] - b[0] * half}" y1="${C[1] - b[1] * half}" x2="${C[0] + b[0] * half}" y2="${C[1] + b[1] * half}" stroke="${i == 3 ? "#ffd166" : "#fff"}" stroke-width="${i == 3 ? 3 : 1.5}" stroke-dasharray="${i == 3 ? "8 5" : "3 5"}" opacity=".85"/>`;
+    }
+  }
+  if (Y.marks) (st.pat.patient.marks ?? []).filter((k) => k.side === ck.side).forEach((k) => {
+    g += `<circle cx="${k.x / d}" cy="${k.y / d}" r="${k.r / d}" fill="none" stroke="#ff8fab" stroke-width="3" stroke-dasharray="5 4"/><text x="${k.x / d}" y="${k.y / d - k.r / d - 6}" text-anchor="middle" class="mklab" style="font-size:16px">${esc(k.label)}</text>`;
+  });
+  g += `<line x1="${HC[0]}" y1="${HC[1]}" x2="${J[0]}" y2="${J[1]}" stroke="#fff" stroke-width="2" stroke-dasharray="6 4" opacity=".85"/>`;
+  if (Y.clarke) {
+    const u = [Hl[0] - F[0], Hl[1] - F[1]], lu = Math.hypot(...u) || 1, w = [A[0] - F[0], A[1] - F[1]], lw = Math.hypot(...w) || 1, r = 46;
+    const e1 = [F[0] - (u[0] / lu) * 60, F[1] - (u[1] / lu) * 60], e2 = [Hl[0] + (u[0] / lu) * 40, Hl[1] + (u[1] / lu) * 40];
+    const p1 = [F[0] + (u[0] / lu) * r, F[1] + (u[1] / lu) * r], p2 = [F[0] + (w[0] / lw) * r, F[1] + (w[1] / lw) * r];
+    const sweep = u[0] * w[1] - u[1] * w[0] > 0 ? 1 : 0;
+    g += `<line x1="${e1[0]}" y1="${e1[1]}" x2="${e2[0]}" y2="${e2[1]}" stroke="#ffb703" stroke-width="3"/><line x1="${F[0]}" y1="${F[1]}" x2="${A[0]}" y2="${A[1]}" stroke="#ffb703" stroke-width="3"/>
+      <path d="M${p1[0]} ${p1[1]} A${r} ${r} 0 0 ${sweep} ${p2[0]} ${p2[1]}" stroke="#ffb703" stroke-width="2.5" fill="none"/>`;
+  }
+  const dot = (id, p, col, lab) => { const [lx, ly, an] = labelAt(id, p, HC, J);
+    return `<g class="hdl" data-p="${id}"><circle cx="${p[0]}" cy="${p[1]}" r="13" fill="${col}" fill-opacity=".35" stroke="${col}" stroke-width="3.5"/><circle cx="${p[0]}" cy="${p[1]}" r="2.5" fill="${col}"/><circle cx="${p[0]}" cy="${p[1]}" r="26" fill="transparent"/>
+    <text x="${lx}" y="${ly}" text-anchor="${an}" class="hlab">${esc(lab)}</text></g>`; };
+  g += dot("fore", F, "#ffb703", t("lFore")) + dot("heel", Hl, "#ffb703", t("lHeel")) + dot("arch", A, "#ffb703", t("lArch")) + dot("hc", HC, "#ffffff", t("lHc")) + dot("toe", J, "#ffffff", t("lToe"));
+  const base = Y.outline && ck.outline ? ck.outline : v.preview;
+  // magnifier: the same picture 3x, clipped to a circle, shown while a point is held
+  g += `<g id="lens" style="display:none;pointer-events:none"><clipPath id="lensclip"><circle id="lensc" r="95"/></clipPath><circle id="lensbg" r="97" fill="#000"/>
+    <g clip-path="url(#lensclip)"><g id="lensimg"><image href="${base}" width="${v.preview_w}" height="${v.preview_h}"/></g></g>
+    <circle id="lensring" r="95" fill="none" stroke="#fff" stroke-width="4"/><path id="lensx" stroke="#ffb703" stroke-width="2" fill="none"/></g>`;
+  return `<svg id="cksvg" viewBox="0 0 ${v.preview_w} ${v.preview_h}" style="touch-action:none"><image href="${base}" width="${v.preview_w}" height="${v.preview_h}"/>${g}</svg>`;
+}
+function movedCount() {
+  const sc = ck.view.measurements.scale, dmm = (a, b) => Math.hypot((a[0] - b[0]) * sc.x_mm_per_px, (a[1] - b[1]) * sc.y_mm_per_px);
+  return ["fore", "heel", "arch", "hc", "toe"].filter((k) => dmm(ck.pts[k], ck.auto[k]) > 0.5).length;
+}
+function paintCheckNums() {
+  const m = ck.view.measurements, deg = clarkeDeg(ck.pts, m.scale), n = movedCount();
+  $("#cknums").innerHTML = `<div class="ckbig"><div class="ml">${t("clarke")}</div><div class="mv">${degText(deg)}</div>
+      <div class="muted">${m.clarke_source === "kontak" ? t("guessK") : t("guessP")}</div><div class="muted" style="margin-top:4px">${t("noLabel")}</div></div>
+    <div class="kv"><span>${t("aiNow")}</span><b>${num(m.ai, 3)}</b></div><p class="muted" style="margin:4px 0 0">${t("aiLater")}</p>
+    ${n ? `<span class="chip warn" style="margin-top:10px">${n} ${t("moved")}</span>` : ""}`;
+}
+function wireCheckDrag() {
+  const svg = $("#cksvg"), v = ck.view, d = v.down;
+  const toSvg = (e) => { const q = svg.createSVGPoint(); q.x = e.clientX; q.y = e.clientY; return q.matrixTransform(svg.getScreenCTM().inverse()); };
+  const lens = (p) => {
+    const L0 = $("#lens"); if (!p) { L0.style.display = "none"; return; }
+    const Z = 3, R = 95, up = p[1] > R * 2.4 ? -1 : 1, c = [Math.min(Math.max(p[0], R + 4), v.preview_w - R - 4), p[1] + up * R * 1.55];
+    L0.style.display = "";
+    ["#lensc", "#lensbg", "#lensring"].forEach((s) => { $(s).setAttribute("cx", c[0]); $(s).setAttribute("cy", c[1]); });
+    $("#lensimg").setAttribute("transform", `translate(${c[0]} ${c[1]}) scale(${Z}) translate(${-p[0]} ${-p[1]})`);
+    $("#lensx").setAttribute("d", `M${c[0] - 16} ${c[1]}H${c[0] + 16}M${c[0]} ${c[1] - 16}V${c[1] + 16}`);
+  };
+  svg.querySelectorAll(".hdl").forEach((h) => {
+    h.onpointerdown = (e) => { e.preventDefault(); ck.drag = h.dataset.p; h.setPointerCapture(e.pointerId); h.classList.add("on"); lens(ck.pts[ck.drag].map((x) => x / d)); };
+    h.onpointermove = (e) => {
+      if (ck.drag !== h.dataset.p) return;
+      const q = toSvg(e), p = [Math.min(Math.max(q.x, 0), v.preview_w), Math.min(Math.max(q.y, 0), v.preview_h)];
+      ck.pts[ck.drag] = [p[0] * d, p[1] * d];
+      moveHandle(h, p); lens(p); paintCheckLines(); paintCheckNums();
+    };
+    h.onpointerup = h.onpointercancel = () => { if (ck.drag !== h.dataset.p) return; ck.drag = null; h.classList.remove("on"); lens(null); };
+  });
+}
+// label beside a handle: Clarke points on the side away from the foot axis, axis points on the
+// other side, below the point when it sits at the top edge
+function labelAt(id, p, HC, J) {
+  const away = (J[0] - HC[0]) * (p[1] - HC[1]) - (J[1] - HC[1]) * (p[0] - HC[0]) > 0 ? -1 : 1;
+  const dir = ["fore", "heel", "arch"].includes(id) ? -away : 1;
+  return [p[0] + dir * 18, p[1] < 34 ? p[1] + 34 : p[1] - 14, dir > 0 ? "start" : "end"];
+}
+// while dragging only the handle and the lines move; a full redraw would drop the pointer capture
+function moveHandle(h, p) {
+  h.querySelectorAll("circle").forEach((c) => { c.setAttribute("cx", p[0]); c.setAttribute("cy", p[1]); });
+  const d = ck.view.down, [lx, ly, an] = labelAt(h.dataset.p, p, [ck.pts.hc[0] / d, ck.pts.hc[1] / d], [ck.pts.toe[0] / d, ck.pts.toe[1] / d]);
+  const tx = h.querySelector("text"); tx.setAttribute("x", lx); tx.setAttribute("y", ly); tx.setAttribute("text-anchor", an);
+}
+function paintCheckLines() {
+  const tmp = document.createElement("div"); tmp.innerHTML = checkSvg();
+  const fresh = tmp.querySelector("svg"), svg = $("#cksvg");
+  // replace everything except the handles and the lens (they are live)
+  [...svg.children].forEach((c) => { if (!c.classList.contains("hdl") && c.id !== "lens") c.remove(); });
+  const first = svg.querySelector(".hdl");
+  [...fresh.children].forEach((c) => { if (!c.classList.contains("hdl") && c.id !== "lens") svg.insertBefore(c, first); });
+}
+function checkScreen(m) {
+  const v = ck.view, Y = ck.layers;
+  const tog = (k, lab, ok = true) => (ok ? `<label class="ly"><input type="checkbox" data-ly="${k}" ${Y[k] ? "checked" : ""}> ${lab}</label>` : "");
+  m.innerHTML = `<h1>${t("chk")} · ${sideName(ck.side)}</h1><p class="sub">${t("chkSub")}</p>${warnBox()}${errBox()}
+    <div class="ckgrid"><div class="card" style="padding:16px"><div class="ckwin" id="ckimg">${checkSvg()}</div>
+      <div class="lys">${tog("outline", t("lyOutline"), !!ck.outline)}${tog("ai", t("lyAI"))}${tog("clarke", t("lyClarke"))}${tog("contact", t("lyContact"), !!v.contact_preview)}${tog("marks", t("lyMarks"), !!st.pat.patient.marks?.some((k) => k.side === ck.side))}</div>
+      ${Y.contact ? `<p class="muted" style="margin-top:6px">${t("contactCap")}</p>` : ""}</div>
+    <div class="card"><p class="cklegend"><span class="sw o"></span>${t("chkClarke")}</p><p class="cklegend"><span class="sw w"></span>${t("chkAxis")}</p>
+      <div id="cknums"></div>
+      <div class="row" style="margin-top:18px"><button class="btn ghost" id="ck_reset" style="${sbtn}">↺ ${t("reset")}</button></div>
+      <div class="row" style="margin-top:18px"><button class="btn ghost" id="ck_skip" style="${sbtn}">${t("skip")}</button><button class="btn ok right" id="ck_ok">${t("confirm")}</button></div>
+      ${ck.skipOpen ? `<div class="skipbox"><div style="font-weight:700;margin-bottom:10px">${t("skipQ")}</div><div class="row">${Object.entries(t("skipR")).map(([k, lab]) => `<button class="btn ghost" data-skip="${k}" style="${sbtn}">${lab}</button>`).join("")}</div><p class="muted" style="margin-top:10px">${t("skipNote")}</p></div>` : ""}</div></div>`;
+  paintCheckNums(); wireCheckDrag();
+  m.querySelectorAll("[data-ly]").forEach((c) => (c.onchange = () => { Y[c.dataset.ly] = c.checked; render(); }));
+  $("#ck_reset").onclick = () => { ck.pts = JSON.parse(JSON.stringify(ck.auto)); render(); };
+  $("#ck_skip").onclick = () => { ck.skipOpen = !ck.skipOpen; render(); };
+  const done = (info, text) => {
+    st.pat = takeWarn(info); st.notice = text;
+    if (ck.back) { const b = ck.back; ck.back = null; b(); return; }
+    afterFoot();
+  };
+  m.querySelectorAll("[data-skip]").forEach((b) => (b.onclick = async () => {
+    m.querySelectorAll("button").forEach((x) => (x.disabled = true));
+    try { done(await invoke("skip_points", { key: st.pat.key, side: ck.side, reason: b.dataset.skip }), `${sideName(ck.side)}: ${t("okSkip")} (${esc(t("skipR")[b.dataset.skip])})`); }
+    catch (e) { st.error = e; render(); }
+  }));
+  $("#ck_ok").onclick = async () => {
+    const b = $("#ck_ok"); b.disabled = true; b.textContent = t("saving");
+    const P = ck.pts, deg = clarkeDeg(P, v.measurements.scale);
+    try {
+      done(await invoke("confirm_points", { key: st.pat.key, side: ck.side, heel: P.hc, toe: P.toe, clarke: { fore: P.fore, heel: P.heel, arch: P.arch } }),
+        `✓ ${sideName(ck.side)} ${t("okChk")} · ${t("clarke")} ${degText(deg)} (${t("lbl")[clarkeLabel(deg)]})`);
+    } catch (e) { st.error = e; render(); }
   };
 }
 
@@ -830,7 +1024,7 @@ function inlowScreen(m) {
   const sum = (foot) => { const f = I[foot], n = footFilled(f), tot = footTotal(f), r = tot != null ? riskOf(tot) : null;
     return `<div class="isum"><b>${t(foot)}</b> · ${n}/${spec.items.length} ${t("filled")}${r ? ` · ${t("total")} <b>${tot}</b> · <span class="chip risk${r[1]}">${r[1]} ${esc(r[2])}</span>` : ""}</div>`; };
   const complete = footTotal(I.kanan) != null && footTotal(I.kiri) != null;
-  m.innerHTML = `<h1>${t("inlow")}</h1><p class="sub">${t("inlowSub")}</p>${warnBox()}${errBox()}
+  m.innerHTML = `<h1>${t("inlow")}</h1><p class="sub">${t("inlowSub")}</p>${noticeBox()}${warnBox()}${errBox()}
     <div class="card"><div class="irow ihead"><div></div><div>${t("kanan")}</div><div>${t("kiri")}</div></div>${rows}</div>
     <div class="ibar"><button class="btn ghost" id="to_list" style="${sbtn}">${t("toList")}</button>${sum("kanan")}${sum("kiri")}${complete ? "" : `<span class="chip warn">${t("inlowNo")}</span>`}<button class="btn right" id="i_next" style="${sbtn}">${t("toNotes")}</button></div>
     <p class="muted" style="margin-top:12px">${esc(spec.notes)}</p>`;
@@ -1014,7 +1208,7 @@ function settingsScreen(m) {
 }
 
 const SCREENS = { home: homeScreen, stale: staleScreen, sesi: sesiScreen, paused: pausedScreen, ended: endedScreen, pform: formScreen, scan: scanScreen, turn: turnScreen,
-  review: reviewScreen, inlow: inlowScreen, notes: notesScreen, finished: finishedScreen, research: researchScreen, setup: setupScreen, settings: settingsScreen };
+  review: reviewScreen, check: checkScreen, inlow: inlowScreen, notes: notesScreen, finished: finishedScreen, research: researchScreen, setup: setupScreen, settings: settingsScreen };
 
 async function render() {
   steps();
