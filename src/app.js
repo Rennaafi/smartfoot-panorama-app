@@ -63,6 +63,10 @@ const T = {
     lyOutline: "Garis tepi", lyAI: "Indeks lengkung", lyClarke: "Sudut Clarke", lyContact: "Peta kontak", lyMarks: "Tanda manual",
     contactCap: "Hijau terang = tertekan kuat, hijau redup = tertekan ringan.",
     lbl: { datar: "datar", normal: "normal", tinggi: "tinggi" }, okChk: "diperiksa", okSkip: "dilewati",
+    stNone: "belum diperiksa", ptCheck: "Pemeriksaan titik", hist: "pemeriksaan sebelumnya tersimpan di riwayat", recheck: "Periksa ulang",
+    onlyUnchk: "Hanya yang belum diperiksa", allChecked: "Semua kaki sudah diperiksa.",
+    remT: "Masih ada kaki yang belum diperiksa", remSub: "Untuk kaki di bawah ini, sudut Clarke tercatat sebagai perkiraan aplikasi tanpa label datar / normal / tinggi. Periksa sekarang, atau akhiri sesi saja; kaki ini tetap bisa diperiksa nanti di Detail pengukuran.",
+    remEnd: "Tetap akhiri sesi",
     // INLOW
     inlow: "Formulir INLOW", inlowSub: "Ketuk satu pilihan per kaki. Ketuk lagi untuk menghapus. Boleh disimpan walau belum lengkap.",
     kanan: "Kaki kanan", kiri: "Kaki kiri", filled: "terisi", total: "Total", qOpen: "4 pertanyaan", yes: "Ya", no: "Tidak",
@@ -179,6 +183,10 @@ const T = {
     lyOutline: "Outline", lyAI: "Arch index", lyClarke: "Clarke's angle", lyContact: "Contact map", lyMarks: "Manual marks",
     contactCap: "Bright green = pressed firmly, dim green = pressed lightly.",
     lbl: { datar: "flat", normal: "normal", tinggi: "high" }, okChk: "checked", okSkip: "skipped",
+    stNone: "not checked", ptCheck: "Point check", hist: "earlier checks kept in the history", recheck: "Check again",
+    onlyUnchk: "Only not checked", allChecked: "Every foot has been checked.",
+    remT: "Some feet have not been checked", remSub: "For the feet below, Clarke's angle is recorded as the app's estimate without a flat / normal / high label. Check them now, or end the session anyway; they can still be checked later in Measurement details.",
+    remEnd: "End the session anyway",
     inlow: "INLOW form", inlowSub: "Tap one choice per foot. Tap again to clear it. It may be saved incomplete.",
     kanan: "Right foot", kiri: "Left foot", filled: "filled in", total: "Total", qOpen: "4 questions", yes: "Yes", no: "No",
     qNote: "When all four questions are answered, the value above is filled in automatically.",
@@ -417,7 +425,7 @@ function stepReachable(i) {
 }
 function steps() {
   const p = stepIndex();
-  $("#steps").classList.toggle("off", !st.pat || !PATIENT_SCREENS.includes(st.screen));
+  $("#steps").classList.toggle("off", !st.pat || !PATIENT_SCREENS.includes(st.screen) || (st.screen === "check" && !!ck.back));
   $("#steps").innerHTML = t("steps").map((n, i) => {
     const done = stepDone(i) && i !== p, go = stepReachable(i);
     return `<button type="button" class="step ${done ? "done" : i == p ? "on" : ""} ${go ? "go" : ""}" data-step="${i}" ${go ? "" : "tabindex='-1'"}><i>${done ? "✓" : i + 1}</i><b>${n}</b></button>`;
@@ -518,28 +526,32 @@ const turnPic = `<svg viewBox="0 0 240 262"><rect x="40" y="30" width="160" heig
   <path d="M70 222 Q120 262 172 224" stroke="#ffb703" stroke-width="7" fill="none" marker-end="url(#tarr)"/>
   <defs><marker id="tarr" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="3.2" markerHeight="3.2" orient="auto"><path d="M0,0L10,5L0,10z" fill="#ffb703"/></marker></defs></svg>`;
 
-// ---- measurement details ("Detail pengukuran"): all values, reference points can be adjusted ----
-const rs = { list: [], sesi: null, key: null, pat: null, side: null, view: null, busy: false, adjust: false, back: "sesi" };
-const rsPatients = () => (rs.list.find((s) => s.key === rs.sesi)?.patients ?? []).filter((p) => p.scans > 0);
+// ---- measurement details ("Detail pengukuran"): all values, the point check, "Belum diperiksa" filter ----
+const rs = { list: [], sesi: null, key: null, pat: null, side: null, view: null, only: false, back: "sesi" };
+const rsSessions = () => rs.list.filter((s) => s.patients.some((p) => p.scans > 0 && (!rs.only || p.unchecked.length)));
+const rsPatients = () => (rs.list.find((s) => s.key === rs.sesi)?.patients ?? []).filter((p) => p.scans > 0 && (!rs.only || p.unchecked.length));
 async function loadView() { rs.view = rs.key && rs.side ? await invoke("get_scan_view", { key: rs.key, side: rs.side }) : null; }
 async function loadPatientRs() {
   rs.pat = rs.key ? await invoke("get_patient", { key: rs.key }) : null;
   const sides = rs.pat?.patient.scans.map((e) => e.side) ?? [];
+  const row = rsPatients().find((p) => p.key === rs.key);
+  if (rs.only && row && !row.unchecked.includes(rs.side)) rs.side = row.unchecked[0];
   if (!sides.includes(rs.side)) rs.side = sides.includes("left") ? "left" : sides[0] ?? null;
   await loadView();
 }
-async function openResearch(key, back) {
-  rs.back = back ?? st.screen; rs.adjust = false;
-  try {
-    rs.list = (await invoke("list_all")).filter((s) => s.patients.some((p) => p.scans > 0));
-    const owner = key && rs.list.find((s) => s.patients.some((p) => p.key === key));
-    rs.sesi = owner?.key ?? (rs.list.find((s) => s.key === rs.sesi) ? rs.sesi : rs.list[0]?.key ?? null);
-    rs.key = key && owner ? key : rsPatients().find((p) => p.key === rs.key)?.key ?? rsPatients()[0]?.key ?? null;
-    await loadPatientRs(); st.error = "";
-  } catch (e) { st.error = e; }
+// keep the current session / patient when they still pass the filter, else take the first that does
+function rsPick(key) {
+  const S = rsSessions(), owner = key && S.find((s) => s.patients.some((p) => p.key === key));
+  rs.sesi = owner?.key ?? (S.find((s) => s.key === rs.sesi) ? rs.sesi : S[0]?.key ?? null);
+  const P = rsPatients();
+  rs.key = key && owner ? key : P.find((p) => p.key === rs.key)?.key ?? P[0]?.key ?? null;
+}
+async function openResearch(key, back, only) {
+  if (back !== undefined) rs.back = back;
+  if (only !== undefined) rs.only = only;
+  try { rs.list = await invoke("list_all"); rsPick(key); await loadPatientRs(); st.error = ""; } catch (e) { st.error = e; }
   st.screen = "research"; render();
 }
-const f1 = (x, d = 1) => (x == null ? "–" : Number(x).toFixed(d));
 function overlayAndNumbers() {
   const v = rs.view, m = v?.measurements;
   if (!v) return { svg: "", nums: "" };
@@ -553,10 +565,11 @@ function overlayAndNumbers() {
       g += `<line x1="${P[0] - b[0] * half}" y1="${P[1] - b[1] * half}" x2="${P[0] + b[0] * half}" y2="${P[1] + b[1] * half}" stroke="${i == 3 ? "#ffd166" : "#ffffff"}" stroke-width="${i == 3 ? 3 : 1.5}" stroke-dasharray="${i == 3 ? "8 5" : "3 5"}" opacity=".85"/>`;
     }
     g += `<line x1="${E[0]}" y1="${E[1]}" x2="${J[0]}" y2="${J[1]}" stroke="#fff" stroke-width="2" stroke-dasharray="6 4" opacity=".8"/>`;
-    // the two reference points are only shown (and draggable) after "Sesuaikan titik acuan"
-    if (rs.adjust) g += `<circle id="ph" cx="${H[0]}" cy="${H[1]}" r="11" fill="#fff" stroke="#1f5fbf" stroke-width="4" style="cursor:grab"/><circle id="pj" cx="${J[0]}" cy="${J[1]}" r="11" fill="#fff" stroke="#1f5fbf" stroke-width="4" style="cursor:grab"/>`;
+    const c = v.check?.status === "diperiksa" ? v.check.clarke_pts : null;
+    if (c) { const [F, Hh, A] = [pt(c.fore), pt(c.heel), pt(c.arch)];
+      g += `<line x1="${F[0]}" y1="${F[1]}" x2="${Hh[0]}" y2="${Hh[1]}" stroke="#ffb703" stroke-width="3"/><line x1="${F[0]}" y1="${F[1]}" x2="${A[0]}" y2="${A[1]}" stroke="#ffb703" stroke-width="3"/>${[F, Hh, A].map((p) => `<circle cx="${p[0]}" cy="${p[1]}" r="7" fill="#ffb703"/>`).join("")}`; }
   }
-  const svg = `<svg id="rsvg" viewBox="0 0 ${v.preview_w} ${v.preview_h}" style="touch-action:none;width:100%;height:100%"><image href="${v.preview}" width="${v.preview_w}" height="${v.preview_h}"/>${g}</svg>`;
+  const svg = `<svg viewBox="0 0 ${v.preview_w} ${v.preview_h}" style="width:100%;height:100%"><image href="${v.preview}" width="${v.preview_w}" height="${v.preview_h}"/>${g}</svg>`;
   const kv = (k) => { const [val, d, u] = VAL[k](m); return `<div class="kv"><span style="display:flex;align-items:center">${esc(X[L]["i_" + k][0])}${ib(k)}</span><b>${num(val, d)}${u ? " " + u : ""} <em class="mp2">${precText(k)}</em></b></div>`; };
   const nums = !m ? `<div class="warn">${t("resNoMeas")}</div>` :
     `${["fl", "fw", "area", "toeless", "A", "B", "C", "ai", "csi"].map(kv).join("")}
@@ -565,60 +578,75 @@ function overlayAndNumbers() {
      ${m.scale.calibrated ? "" : `<div class="warn" style="margin-top:14px">${t("resUncal")}</div>`}`;
   return { svg, nums };
 }
-function wireResearchDrag() {
-  const svg = $("#rsvg"); if (!svg || !$("#ph")) return;
-  const toSvg = (e) => { const q = svg.createSVGPoint(); q.x = e.clientX; q.y = e.clientY; return q.matrixTransform(svg.getScreenCTM().inverse()); };
-  let drag = null;
-  ["ph", "pj"].forEach((id) => {
-    const c = $("#" + id);
-    c.onpointerdown = (e) => { drag = c; c.setPointerCapture(e.pointerId); };
-    c.onpointermove = (e) => { if (drag !== c) return; const q = toSvg(e); c.setAttribute("cx", q.x); c.setAttribute("cy", q.y); };
-    c.onpointerup = async () => {
-      if (drag !== c) return; drag = null;
-      const d = rs.view.down, at = (i, k) => Number($(i).getAttribute(k)) * d;
-      await remeasure([at("#ph", "cx"), at("#ph", "cy")], [at("#pj", "cx"), at("#pj", "cy")]);
-    };
-  });
-}
-async function remeasure(heel, toe) {
-  rs.busy = true; $("#rsnums").style.opacity = ".4";
-  try { rs.view.measurements = await invoke("remeasure", { key: rs.key, side: rs.side, heel, toe }); st.error = ""; }
-  catch (e) { st.error = e; }
-  rs.busy = false; paintResearch();
-}
-function paintResearch() {
-  const o = overlayAndNumbers();
-  $("#rsimg").innerHTML = o.svg; $("#rsnums").innerHTML = o.nums; $("#rsnums").style.opacity = "1";
-  const v = rs.view;
-  if (v?.measurements) wireInfo($("#rsnums"), { img: v.preview, w: v.preview_w, h: v.preview_h, down: v.down, m: v.measurements });
-  wireResearchDrag();
+// the latest point check of the shown foot, and how many earlier checks it replaced
+function checkCard() {
+  const v = rs.view; if (!v?.measurements) return "";
+  const e = rs.pat?.patient.scans.find((x) => x.side === rs.side), c = v.check, hist = e?.check_history?.length ?? 0;
+  const when = c ? `${esc(c.operator)} · ${esc(c.at.slice(0, 10))} ${fmtTime(c.at)}` : "";
+  const state = !c ? `<span class="chip warn">${t("stNone")}</span>`
+    : c.status === "diperiksa" ? `<span class="chip ok">${t("okChk")}</span> ${t("clarke")} <b>${degText(c.clarke_deg)}</b> (${t("lbl")[clarkeLabel(c.clarke_deg)]}) · ${when}`
+    : `<span class="chip warn">${t("okSkip")}</span> ${esc(t("skipR")[c.skip_reason] ?? c.skip_reason ?? "")} · ${when}`;
+  return `<div class="card ckcard"><div class="ml" style="margin-bottom:8px">${t("ptCheck")}</div><div class="row" style="gap:8px">${state}</div>
+    ${hist ? `<p class="muted" style="margin:8px 0 0">${hist} ${t("hist")}</p>` : ""}
+    <div class="row" style="margin-top:14px"><button class="btn ${c?.status === "diperiksa" ? "ghost" : ""}" id="rs_chk" style="${sbtn}">${c?.status === "diperiksa" ? t("recheck") : t("chk")} →</button></div></div>`;
 }
 function researchScreen(m) {
-  const back = () => { st.screen = rs.back; rs.adjust = false; render(); };
-  if (!rs.list.length) {
-    m.innerHTML = `<h1>${t("res")}</h1>${errBox()}<div class="card"><p class="sub" style="margin:0">${t("resNone")}</p></div><div class="row" style="margin-top:22px"><button class="btn ghost" id="rback">${t("back")}</button></div>`;
-    $("#rback").onclick = back; return;
+  const back = () => { st.screen = rs.back; render(); };
+  const filter = `<label class="ly" style="flex:none"><input type="checkbox" id="rs_only" ${rs.only ? "checked" : ""}> ${t("onlyUnchk")}</label>`;
+  if (!rsSessions().length) {
+    m.innerHTML = `<h1>${t("res")}</h1>${errBox()}<div class="row" style="margin-bottom:16px">${filter}</div><div class="card"><p class="sub" style="margin:0">${rs.only ? t("allChecked") : t("resNone")}</p></div><div class="row" style="margin-top:22px"><button class="btn ghost" id="rback" style="${sbtn}">${t("back")}</button></div>`;
+    $("#rback").onclick = back; $("#rs_only").onchange = (e) => openResearch(null, undefined, e.target.checked); return;
   }
-  const scans = rs.pat?.patient.scans ?? [];
-  m.innerHTML = `<h1>${t("res")}</h1><p class="sub">${t("resSub")}</p>${errBox()}
-    <div class="row" style="margin-bottom:16px">
-      <label style="margin:0">${t("resSess")}</label><select id="rs_sess" style="width:auto">${rs.list.map((s) => `<option value="${esc(s.key)}" ${s.key == rs.sesi ? "selected" : ""}>${esc(s.date)} · ${esc(s.place)}</option>`).join("")}</select>
-      <label style="margin:0">${t("resPat")}</label><select id="rs_pat" style="width:auto">${rsPatients().map((p) => `<option value="${esc(p.key)}" ${p.key == rs.key ? "selected" : ""}>${String(p.no).padStart(3, "0")} ${esc(p.nama)}</option>`).join("")}</select>
-      <div class="seg" style="flex:none">${["left", "right"].filter((s) => scans.some((e) => e.side === s)).map((s) => `<button data-sd="${s}" class="${rs.side == s ? "on" : ""}" style="padding:10px 16px">${sideName(s)}</button>`).join("")}</div></div>
-    <div class="grid2"><div class="card"><div class="scanwin" id="rsimg" style="background:#10151f"></div>
-      ${rs.adjust ? `<p class="muted" style="margin:12px 0 0">${t("resPts")}</p>` : ""}
-      <div class="row" style="margin-top:12px"><button class="btn ${rs.adjust ? "ok" : "ghost"}" id="rs_adj" style="padding:10px 16px;font-size:15px">${rs.adjust ? "✓ " + t("adjustOff") : t("adjust")}</button>
-        ${rs.adjust ? `<button class="btn ghost" id="rs_auto" style="padding:10px 16px;font-size:15px">${t("resAuto")}</button>` : ""}</div></div>
-    <div class="card" id="rsnums"></div></div>
-    <div class="row" style="margin-top:22px"><button class="btn ghost" id="rback">${t("back")}</button></div>`;
-  paintResearch();
+  const scans = rs.pat?.patient.scans ?? [], row = rsPatients().find((p) => p.key === rs.key);
+  const sideBtn = (s) => `<button data-sd="${s}" class="${rs.side == s ? "on" : ""}" style="padding:12px 16px;font-size:16px;white-space:nowrap">${sideName(s)}${row?.unchecked.includes(s) ? ' <span class="udot"></span>' : ""}</button>`;
+  m.innerHTML = `<h1>${t("res")}</h1><p class="sub">${t("resSub")}</p>${noticeBox()}${errBox()}
+    <div class="row" style="margin-bottom:16px">${filter}
+      <label style="margin:0">${t("resSess")}</label><select id="rs_sess" style="width:auto">${rsSessions().map((s) => `<option value="${esc(s.key)}" ${s.key == rs.sesi ? "selected" : ""}>${esc(s.date)} · ${esc(s.place)}</option>`).join("")}</select>
+      <label style="margin:0">${t("resPat")}</label><select id="rs_pat" style="width:auto">${rsPatients().map((p) => `<option value="${esc(p.key)}" ${p.key == rs.key ? "selected" : ""}>${String(p.no).padStart(3, "0")} ${esc(p.nama)}${p.unchecked.length ? " ●" : ""}</option>`).join("")}</select>
+      <div class="seg" style="flex:none">${["left", "right"].filter((s) => scans.some((e) => e.side === s)).map(sideBtn).join("")}</div></div>
+    <div class="grid2"><div class="card"><div class="scanwin" id="rsimg" style="background:#10151f"></div></div>
+    <div>${checkCard()}<div class="card" id="rsnums" style="margin-top:18px"></div></div></div>
+    <div class="row" style="margin-top:22px"><button class="btn ghost" id="rback" style="${sbtn}">${t("back")}</button></div>`;
+  const o = overlayAndNumbers();
+  $("#rsimg").innerHTML = o.svg; $("#rsnums").innerHTML = o.nums;
+  const v = rs.view;
+  if (v?.measurements) wireInfo($("#rsnums"), { img: v.preview, w: v.preview_w, h: v.preview_h, down: v.down, m: v.measurements });
   const reload = async (f) => { try { await f(); st.error = ""; } catch (x) { st.error = x; } render(); };
+  $("#rs_only").onchange = (e) => reload(async () => { rs.only = e.target.checked; rsPick(rs.key); await loadPatientRs(); });
   $("#rs_sess").onchange = (e) => reload(async () => { rs.sesi = e.target.value; rs.key = rsPatients()[0]?.key ?? null; await loadPatientRs(); });
   $("#rs_pat").onchange = (e) => reload(async () => { rs.key = e.target.value; await loadPatientRs(); });
   m.querySelectorAll("[data-sd]").forEach((b) => (b.onclick = () => reload(async () => { rs.side = b.dataset.sd; await loadView(); })));
-  $("#rs_adj").onclick = () => { rs.adjust = !rs.adjust; render(); };
-  if ($("#rs_auto")) $("#rs_auto").onclick = () => remeasure(null, null);
+  if ($("#rs_chk")) $("#rs_chk").onclick = () => checkLater(rs.pat, rs.side, () => openResearch(rs.key));
   $("#rback").onclick = back;
+}
+// open the point check outside the patient flow (from Detail pengukuran or the Akhiri sesi reminder);
+// `then` runs after confirm, skip or Kembali, with the patient flow state put back
+function checkLater(pat, side, then) {
+  const keep = { pat: st.pat, side: st.side };
+  st.pat = pat;
+  openCheck(side, null, () => { st.pat = keep.pat; st.side = keep.side; then(); });
+}
+
+// ---- Akhiri sesi: remind about feet nobody has checked ----
+async function endSession(after) {
+  let list = [];
+  try { list = await invoke("unchecked_feet"); } catch (e) { st.error = e; render(); return; }
+  const end = async () => {
+    try { st.warn = await invoke("end_sesi"); st.error = ""; closeModal(); await loadSesi(); st.screen = after ?? "ended"; } catch (e) { closeModal(); st.error = e; }
+    render();
+  };
+  if (!list.length) return end();
+  modal(`<div class="mhead"><h3>${t("remT")}</h3><button class="btn ghost mx" id="mx">✕</button></div><p style="line-height:1.5;margin-bottom:14px">${t("remSub")}</p>
+    <div class="remlist">${list.map((f, i) => `<div class="remrow"><div><b>${String(f.no).padStart(3, "0")} ${esc(f.nama)}</b> · ${sideName(f.side)}<div class="muted">${f.status === "dilewati" ? `${t("okSkip")}: ${esc(t("skipR")[f.skip_reason] ?? f.skip_reason ?? "")}` : t("stNone")}</div></div>
+      <button class="btn ghost right" data-rem="${i}" style="padding:9px 16px;font-size:15px">${t("chk")} →</button></div>`).join("")}</div>
+    <div class="row" style="margin-top:20px"><button class="btn ghost" id="rem_back" style="${sbtn}">${t("back")}</button><button class="btn bad right" id="rem_end" style="${sbtn}">${t("remEnd")}</button></div>`, "wide");
+  $("#mx").onclick = $("#rem_back").onclick = () => { closeModal(); render(); };
+  $("#rem_end").onclick = () => { $("#rem_end").disabled = true; end(); };
+  document.querySelectorAll("#modal [data-rem]").forEach((b) => (b.onclick = async () => {
+    const f = list[Number(b.dataset.rem)];
+    try { const pat = await invoke("get_patient", { key: f.key }); closeModal(); checkLater(pat, f.side, async () => { await toHub(); endSession(after); }); }
+    catch (e) { closeModal(); st.error = e; render(); }
+  }));
 }
 
 // ---- screens ----
@@ -678,7 +706,7 @@ function sesiScreen(m) {
     <div style="height:18px"></div>${warnBox()}${errBox()}
     ${S.unfinished ? unfinishedBanner(S.unfinished) : ""}
     <div class="card" style="margin-bottom:18px"><div class="row"><div><div class="muted">${t("hubOp")}</div><div style="font-size:24px;font-weight:800">${esc(s.operator)}</div></div>
-      <button class="btn ghost" id="h_op" style="${sbtn}">${t("chOp")}</button>
+      <button class="btn ghost" id="h_op" style="${sbtn}">${t("chOp")}</button><button class="btn ghost" id="h_det" style="${sbtn}">${t("resBtn")}</button>
       <button class="btn right" id="h_new" ${S.unfinished ? "disabled" : ""}>${t("newP")}</button></div></div>
     <div class="card"><h2 style="font-size:20px;margin-bottom:12px">${t("list")}</h2>${patientTable()}</div>`;
   wireUnfinished(S.unfinished);
@@ -686,10 +714,8 @@ function sesiScreen(m) {
   m.querySelectorAll("[data-open]").forEach((b) => (b.onclick = () => openPatient(b.dataset.open)));
   $("#h_pause").onclick = async () => { try { st.sesi = takeWarn(await invoke("pause_sesi", { pause: true })); st.error = ""; st.screen = "paused"; } catch (e) { st.error = e; } render(); };
   $("#h_op").onclick = () => changeOperatorModal();
-  armed($("#h_end"), t("endS"), t("endSure"), async () => {
-    try { st.warn = await invoke("end_sesi"); st.error = ""; await loadSesi(); st.screen = "ended"; } catch (e) { st.error = e; }
-    render();
-  });
+  $("#h_det").onclick = () => openResearch(null, "sesi");
+  armed($("#h_end"), t("endS"), t("endSure"), () => endSession("ended"));
 }
 function changeOperatorModal() {
   const ops = st.settings?.operators ?? [];
@@ -715,11 +741,7 @@ function staleScreen(m) {
     <div class="card"><div class="row"><div><div style="font-size:22px;font-weight:800">${esc(s.place)}</div><div class="muted">${esc(fmtDate(s.date))} · ${S.patients.filter((p) => !p.cancelled).length} ${t("patients")} · ${t("hubOp")} ${esc(s.operator)}</div></div>
       <button class="btn right" id="st_end" ${S.unfinished ? "disabled" : ""}>${t("endOld")}</button></div></div>`;
   wireUnfinished(S.unfinished);
-  $("#st_end").onclick = async () => {
-    $("#st_end").disabled = true;
-    try { st.warn = await invoke("end_sesi"); st.error = ""; await loadSesi(); st.screen = hubScreen(); } catch (e) { st.error = e; }
-    render();
-  };
+  $("#st_end").onclick = () => endSession("home");
 }
 
 function pausedScreen(m) {
@@ -857,7 +879,7 @@ async function openCheck(side, outline, back) {
   try {
     const v = await invoke("get_scan_view", { key: st.pat.key, side });
     const m = v.measurements;
-    if (!m) { afterFoot(); return; }
+    if (!m) { back ? back() : afterFoot(); return; }
     // rough fallback if the backend had no Clarke guess: tangent from toe base to heel end, arch midway
     const g = m.clarke_pts ?? { fore: m.toe_base, heel: m.heel_end, arch: [(m.toe_base[0] + m.heel_end[0]) / 2, (m.toe_base[1] + m.heel_end[1]) / 2] };
     const auto = { fore: [...g.fore], heel: [...g.heel], arch: [...g.arch], hc: [...m.heel_centre], toe: [...m.toe_tip] };
@@ -984,11 +1006,13 @@ function checkScreen(m) {
       <div id="cknums"></div>
       <div class="row" style="margin-top:18px"><button class="btn ghost" id="ck_reset" style="${sbtn}">↺ ${t("reset")}</button></div>
       <div class="row" style="margin-top:18px"><button class="btn ghost" id="ck_skip" style="${sbtn}">${t("skip")}</button><button class="btn ok right" id="ck_ok">${t("confirm")}</button></div>
+      ${ck.back ? `<div class="row" style="margin-top:18px"><button class="btn ghost" id="ck_back" style="${sbtn}">${t("back")}</button></div>` : ""}
       ${ck.skipOpen ? `<div class="skipbox"><div style="font-weight:700;margin-bottom:10px">${t("skipQ")}</div><div class="row">${Object.entries(t("skipR")).map(([k, lab]) => `<button class="btn ghost" data-skip="${k}" style="${sbtn}">${lab}</button>`).join("")}</div><p class="muted" style="margin-top:10px">${t("skipNote")}</p></div>` : ""}</div></div>`;
   paintCheckNums(); wireCheckDrag();
   m.querySelectorAll("[data-ly]").forEach((c) => (c.onchange = () => { Y[c.dataset.ly] = c.checked; render(); }));
   $("#ck_reset").onclick = () => { ck.pts = JSON.parse(JSON.stringify(ck.auto)); render(); };
   $("#ck_skip").onclick = () => { ck.skipOpen = !ck.skipOpen; render(); };
+  if ($("#ck_back")) $("#ck_back").onclick = () => { const b = ck.back; ck.back = null; b(); };
   const done = (info, text) => {
     st.pat = takeWarn(info); st.notice = text;
     if (ck.back) { const b = ck.back; ck.back = null; b(); return; }
