@@ -268,6 +268,9 @@ fn friendly_with(raw: &str, still_listed: bool) -> String {
         // measured 2026-11-03 on the LiDE 300 driverless route: LOCK closed -> this error,
         // LOCK open -> the same scan succeeds. (The Canon IJ route returns a blank image instead.)
         "LOCKED: the scan could not start. Check that the transport LOCK switch is open and that the scanner is fully assembled (it needs its own glass panel to start a scan), then try again.".into()
+    } else if low.contains("null-valued expression") || low.contains("device is not connected") || low.contains("not attached") {
+        // seen 2026-11-19: USB pulled during a scan -> PowerShell loses the device object
+        "DISCONNECTED: the scanner was disconnected during the scan. Plug the USB cable back in, wait for the green chip, then try again.".into()
     } else if r.to_lowercase().contains("busy") {
         "BUSY: the scanner is busy. Wait a few seconds and try again.".into()
     } else {
@@ -305,6 +308,7 @@ mod tests {
         assert!(friendly_with(raw, false).starts_with("NOT_FOUND"));
         // the driver text without a device-list answer keeps the old behaviour
         assert!(friendly(raw).starts_with("LOCKED"));
+        assert!(friendly("ERR|You cannot call a method on a null-valued expression.").starts_with("DISCONNECTED"));
         // a full disk gets its own code, not the raw Windows sentence
         assert!(friendly("ERR|There is not enough space on the disk.").starts_with("DISK_FULL"));
         assert!(friendly("ERR|Something else").starts_with("SCAN_FAILED"));

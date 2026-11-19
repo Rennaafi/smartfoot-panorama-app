@@ -219,6 +219,9 @@ struct PatientRow {
     completed: bool,
     cancelled: bool,
     kesimpulan: String,
+    /// "Hasil skrining": one plain sentence per foot (right first) and the client's advice list.
+    hasil: Vec<String>,
+    saran: Vec<String>,
     /// Feet whose reference points nobody has confirmed yet ("Belum diperiksa").
     unchecked: Vec<String>,
 }
@@ -234,6 +237,8 @@ fn patient_row(dd: &Path, dir: &Path, p: &Patient) -> PatientRow {
         completed: p.completed,
         cancelled: p.cancelled,
         kesimpulan: export::kesimpulan(p),
+        hasil: export::hasil(p),
+        saran: export::saran(p),
         unchecked: session::unchecked_sides(p),
     }
 }
@@ -476,8 +481,17 @@ pub fn rotate_saved_scan(path: &Path) -> Result<(), String> {
     img.rotate180().save(path).map_err(|e| format!("cannot save turned scan: {e}"))
 }
 
-pub fn rotates(side: &str) -> bool {
-    side == "right"
+/// Only a standing patient turns around for the right foot; a seated patient just moves the other
+/// foot onto the glass, so nothing is turned (found 2026-11-19: seated right feet came out upside
+/// down). Older records without a posture count as standing.
+pub fn rotates(side: &str, posisi: &str) -> bool {
+    side == "right" && posisi != "duduk"
+}
+
+/// The scanner writes here first; only a finished (and, if needed, turned) image is renamed to the
+/// pending file, so closing the app mid-scan can never leave an unturned pending scan (2026-11-19).
+fn scanning_file(dir: &Path, side: &str) -> PathBuf {
+    dir.join(session::PENDING).join(format!("{side}_scanning.png"))
 }
 
 #[tauri::command]
@@ -489,12 +503,16 @@ async fn scan_foot(app: tauri::AppHandle, key: String, side: String) -> Result<S
         let s = settings(&app)?;
         let dev = choose_device(&s)?;
         let (_, dir) = patient_dir(&app, &key)?;
+        let posisi = session::read_patient(&dir)?.posisi;
         let out = session::pending_file(&dir, &side);
+        let tmp = scanning_file(&dir, &side);
         std::fs::create_dir_all(dir.join(session::PENDING)).map_err(|e| e.to_string())?;
-        let r = scanner::scan(&dev, 300, &out)?;
-        if rotates(&side) {
-            rotate_saved_scan(&out)?;
+        let _ = std::fs::remove_file(&tmp);
+        let r = scanner::scan(&dev, 300, &tmp)?;
+        if rotates(&side, &posisi) {
+            rotate_saved_scan(&tmp)?;
         }
+        std::fs::rename(&tmp, &out).map_err(|e| format!("cannot keep the scan: {e}"))?;
         outcome_from(&out, r.seconds, r.width_px, r.height_px)
     })
     .await
@@ -518,6 +536,10 @@ async fn resume_patient(app: tauri::AppHandle, key: String) -> Result<ResumeInfo
             return Err("NOT_RESUMABLE: this patient is already finished or cancelled".to_string());
         }
         let want = session::next_side(&p);
+        // a scan that was still being written when the app closed is incomplete: drop it
+        for side in session::SIDES {
+            let _ = std::fs::remove_file(scanning_file(&dir, side));
+        }
         let mut pending = None;
         for side in session::SIDES {
             let f = session::pending_file(&dir, side);
@@ -543,7 +565,8 @@ async fn resume_patient(app: tauri::AppHandle, key: String) -> Result<ResumeInfo
 async fn accept_scan(app: tauri::AppHandle, key: String, side: String, seconds: f64, width_px: u32, height_px: u32, warnings: Vec<String>) -> Result<PatientInfo, String> {
     tauri::async_runtime::spawn_blocking(move || {
         let (dd, dir) = patient_dir(&app, &key)?;
-        session::accept(&dir, &side, seconds, width_px, height_px, rotates(&side), warnings)?;
+        let posisi = session::read_patient(&dir)?.posisi;
+        session::accept(&dir, &side, seconds, width_px, height_px, rotates(&side, &posisi), warnings)?;
         // measure right away; a failure to find a foot leaves the scan saved but unmeasured
         let m = measure::measure_scan(&dir.join(session::raw_scan_name(&side)), &current_scale(), None).ok();
         session::set_measurements(&dir, &side, m)?;
@@ -895,6 +918,8 @@ mod tests {
         let _ = std::fs::remove_file(&p);
         assert_eq!(r.dimensions(), (40, 60));
         assert_eq!(r.get_pixel(40 - 1 - 1, 60 - 1 - 2), &Rgb([255, 0, 0]));
-        assert!(rotates("right") && !rotates("left"));
+        assert!(rotates("right", "berdiri") && !rotates("left", "berdiri"));
+        assert!(!rotates("right", "duduk") && !rotates("left", "duduk"), "a seated patient does not turn around");
+        assert!(rotates("right", ""), "older records without a posture count as standing");
     }
 }

@@ -28,11 +28,21 @@ fn foot_scores<'a>(p: &'a Patient, side: &str) -> &'a FootScores {
     if side == "right" { &p.inlow.kanan } else { &p.inlow.kiri }
 }
 
-/// One foot in words, e.g. "Risiko rendah (B), Clarke 35° normal, AI 0,36 (garis tepi)".
+/// One foot in words, e.g. "Lengkung normal (sudut Clarke 35°). Arch Index 0,36. Risiko rendah (B)".
 /// Clarke gets a label only after a person confirmed its points; AI never gets Cavanagh's label,
 /// because it is measured on the outline, which includes the lifted arch (2026-11-18 agreement).
 pub fn foot_summary(p: &Patient, side: &str) -> String {
     let mut parts = vec![];
+    match (entry(p, side), meas(p, side)) {
+        (Some(e), Some(m)) => {
+            match session::reported_clarke(e) {
+                (Some(c), "diperiksa") => parts.push(format!("Lengkung {} (sudut Clarke {}°)", arch_words(c), comma(c, 0))),
+                _ => parts.push("Lengkung belum dapat ditentukan (titik belum diperiksa)".into()),
+            }
+            parts.push(format!("Arch Index {}", comma(m.ai, 2)));
+        }
+        _ => parts.push(if p.scans.iter().any(|e| e.side == side) { "Belum terukur".into() } else { "Belum dipindai".into() }),
+    }
     match foot_scores(p, side).total() {
         Some(t) => {
             let c = inlow::risk_class(t);
@@ -40,22 +50,28 @@ pub fn foot_summary(p: &Patient, side: &str) -> String {
         }
         None => parts.push("INLOW belum lengkap".into()),
     }
-    match (entry(p, side), meas(p, side)) {
-        (Some(e), Some(m)) => {
-            match session::reported_clarke(e) {
-                (Some(c), "diperiksa") => parts.push(format!("Clarke {}° {}", comma(c, 0), clarke_label(c))),
-                _ => parts.push("Sudut Clarke belum diperiksa".into()),
-            }
-            parts.push(format!("AI {} (garis tepi)", comma(m.ai, 2)));
-        }
-        _ => parts.push(if p.scans.iter().any(|e| e.side == side) { "belum terukur".into() } else { "belum dipindai".into() }),
-    }
-    parts.join(", ")
+    parts.join(". ")
+}
+
+/// Clarke's label for a sentence: "datar / flat foot", "normal", "tinggi / cavus".
+fn arch_words(deg: f32) -> String {
+    clarke_label(deg).replace(" (", " / ").replace(')', "")
+}
+
+/// "Hasil skrining": one sentence per foot, right first as in the client's sheet (agreed 2026-11-19:
+/// Clarke gives the label only after a person checked the points; AI is a number only).
+pub fn hasil(p: &Patient) -> Vec<String> {
+    vec![format!("Kaki kanan: {}.", foot_summary(p, "right")), format!("Kaki kiri: {}.", foot_summary(p, "left"))]
+}
+
+/// The client's advice for the worse foot (empty until at least one foot's INLOW is complete).
+pub fn saran(p: &Patient) -> Vec<String> {
+    inlow::worse_letter(&p.inlow).map(|l| inlow::management(l).1.iter().map(|s| s.to_string()).collect()).unwrap_or_default()
 }
 
 /// The KESIMPULAN cell: both feet, right first as in the client's sheet.
 pub fn kesimpulan(p: &Patient) -> String {
-    format!("Kanan: {}. Kiri: {}.", foot_summary(p, "right"), foot_summary(p, "left"))
+    hasil(p).join(" ")
 }
 
 struct Fmt {
@@ -324,7 +340,8 @@ mod tests {
         let (sd, _) = start_sesi(&d, "X", "Rina", "7MY").unwrap();
         let dir = create_patient(&sd, &PatientForm { nama: "Siti".into(), usia: Some(41), kelamin: "Perempuan".into(), td: "".into(), bb: None, posisi: "berdiri".into() }, "dev").unwrap();
         let mut p = read_patient(&dir).unwrap();
-        assert_eq!(kesimpulan(&p), "Kanan: INLOW belum lengkap, belum dipindai. Kiri: INLOW belum lengkap, belum dipindai.");
+        assert_eq!(kesimpulan(&p), "Kaki kanan: Belum dipindai. INLOW belum lengkap. Kaki kiri: Belum dipindai. INLOW belum lengkap.");
+        assert!(saran(&p).is_empty(), "no advice before any INLOW is complete");
         for it in ITEMS.iter() {
             p.inlow.kanan.items.insert(it.key.into(), it.options[0].0);
         }
@@ -340,14 +357,17 @@ mod tests {
         };
         p.scans.push(ScanEntry { file: raw_scan_name("right"), side: "right".into(), attempt: 1, seconds: 12.0, width_px: 1, height_px: 1, dpi: 300, rotated_180: true, accepted_at: now_iso(), warnings: vec![], measurements: Some(m), check: None, check_history: vec![], images_version: None });
         // the app's guess alone never gets a label
-        assert_eq!(foot_summary(&p, "right"), "Risiko rendah (B), Sudut Clarke belum diperiksa, AI 0,24 (garis tepi)");
+        assert_eq!(foot_summary(&p, "right"), "Lengkung belum dapat ditentukan (titik belum diperiksa). Arch Index 0,24. Risiko rendah (B)");
+        assert_eq!(saran(&p).first().map(String::as_str), Some("Penggunaan alas kaki yang tepat"));
         let chk = |status: &str, deg: Option<f32>, reason: Option<&str>| PointCheck { status: status.into(), skip_reason: reason.map(Into::into), operator: "Rina".into(), at: now_iso(), clarke_pts: None, clarke_deg: deg, clarke_moved_mm: None, ai_moved_mm: None, guess_source: None };
         p.scans[0].check = Some(chk("dilewati", None, Some("antrean panjang")));
-        assert_eq!(foot_summary(&p, "right"), "Risiko rendah (B), Sudut Clarke belum diperiksa, AI 0,24 (garis tepi)");
+        assert_eq!(foot_summary(&p, "right"), "Lengkung belum dapat ditentukan (titik belum diperiksa). Arch Index 0,24. Risiko rendah (B)");
         assert_eq!(unchecked_sides(&p), vec!["right".to_string()]);
         p.scans[0].check = Some(chk("diperiksa", Some(38.6), None));
-        assert_eq!(foot_summary(&p, "right"), "Risiko rendah (B), Clarke 39° normal, AI 0,24 (garis tepi)");
-        assert!(kesimpulan(&p).starts_with("Kanan: Risiko rendah (B), Clarke 39° normal, AI 0,24 (garis tepi). Kiri: INLOW belum lengkap"));
+        assert_eq!(foot_summary(&p, "right"), "Lengkung normal (sudut Clarke 39°). Arch Index 0,24. Risiko rendah (B)");
+        assert!(kesimpulan(&p).starts_with("Kaki kanan: Lengkung normal (sudut Clarke 39°). Arch Index 0,24. Risiko rendah (B). Kaki kiri: Belum dipindai. INLOW belum lengkap"));
+        assert_eq!(arch_words(25.0), "datar / flat foot");
+        assert_eq!(arch_words(50.0), "tinggi / cavus");
         assert!(unchecked_sides(&p).is_empty());
     }
 

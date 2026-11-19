@@ -34,12 +34,12 @@ const T = {
     e_C_TD: "Tekanan darah ditulis seperti 120/80.", e_C_BB: "Berat badan harus 20–250 kg.",
     // scan
     scan: "Pindai", left: "Kaki kiri", right: "Kaki kanan",
-    subStandL: "Pasien berdiri dengan kedua kaki di platform, kaki kiri di atas kaca dan tumit menempel pada penahan. Berdiri seimbang dan diam sampai pemindaian selesai.",
-    subStandR: "Kaki kanan di atas kaca, tumit menempel pada penahan. Berdiri seimbang dan diam sampai pemindaian selesai.",
-    subSitL: "Pasien duduk. Letakkan kaki kiri di atas kaca, tumit pada penahan. Diam sampai pemindaian selesai.",
-    subSitR: "Letakkan kaki kanan di atas kaca, tumit pada penahan. Diam sampai pemindaian selesai.",
+    subStandL: "Pasien berdiri dengan kedua kaki di platform. Kaki kiri di dalam bingkai putih, jari dan tumit dua jari dari selotip. Berdiri seimbang dan diam sampai pemindaian selesai.",
+    subStandR: "Kaki kanan di dalam bingkai putih, jari dan tumit dua jari dari selotip. Berdiri seimbang dan diam sampai pemindaian selesai.",
+    subSitL: "Pasien duduk. Kaki kiri di dalam bingkai putih, jari dan tumit dua jari dari selotip. Diam sampai pemindaian selesai.",
+    subSitR: "Pasien tetap duduk. Pindahkan kaki kanan ke dalam bingkai putih, jari dan tumit dua jari dari selotip. Diam sampai pemindaian selesai.",
     doScan: "Mulai pindai", scanning: "Memindai… jangan gerakkan kaki", ready: "Siap", retry: "Coba lagi",
-    turn: "Silakan berbalik", turnSub: "Minta pasien berbalik badan menghadap sisi lain platform, lalu letakkan kaki kanan di atas kaca dengan tumit pada penahan.",
+    turn: "Silakan berbalik", turnSub: "Minta pasien berbalik badan menghadap sisi lain platform, lalu letakkan kaki kanan di dalam bingkai putih, jari dan tumit dua jari dari selotip.",
     turnGo: "Pindai kaki kanan →",
     review: "Tinjau hasil", reviewSub: "Garis biru = tepi kaki yang terdeteksi. Pastikan sesuai bentuk kaki.",
     chkFound: "Kaki terdeteksi", chkInside: "Kaki penuh di dalam area",
@@ -87,7 +87,7 @@ const T = {
     mLabel: "Jenis tanda", mKalus: "Kalus", mLuka: "Luka", mLain: "Lainnya", mLainPh: "tulis jenis tanda", marks: "tanda", noScan: "Belum dipindai",
     finish: "Simpan dan selesai ✓", finishing: "Menyimpan…", toScan: "Simpan, lanjut pindai →", toList: "← Daftar pasien",
     // finished
-    done: "Pasien selesai", doneSub: "Semua data pasien tersimpan.", saved: "Tersimpan di", conc: "Kesimpulan",
+    done: "Pasien selesai", doneSub: "Semua data pasien tersimpan.", saved: "Tersimpan di", conc: "Hasil skrining",
     nextP: "Pasien berikutnya →", toHub: "Daftar pasien", resBtn: "Detail pengukuran →",
     // errors from Rust ("CODE: detail")
     e_BAD_IMAGE: "Hasil pemindaian rusak atau terlalu kecil. Ulangi pemindaian.",
@@ -102,6 +102,10 @@ const T = {
     e_FILE_OPEN: "File Excel rekap tidak bisa diperbarui karena sedang dibuka. Tutup Excel; file diperbarui lagi pada penyimpanan berikutnya", e_PICTURE: "Gambar analisis tidak bisa dibuat",
     e_TIMEOUT: "Scanner tidak merespons. Cabut dan colok kembali kabel USB, lalu ulangi.",
     e_NOT_FOUND: "Scanner tidak ditemukan. Periksa kabel USB dan pastikan scanner menyala.",
+    e_DISCONNECTED: "Kabel scanner terlepas saat memindai. Colok kembali kabel USB, tunggu tanda hijau \"Scanner siap\", lalu tekan Coba lagi.",
+    wLR: "Panjang kaki ini {a} mm, kaki {o} {b} mm: beda {d} mm. Biasanya beda kurang dari 1 cm. Periksa jari menekuk, tumit terpotong, atau kaki bergerak, lalu ulangi pindai bila perlu.",
+    noFootSure: "Tidak ada kaki di gambar. Tekan lagi untuk tetap menerima",
+    phKaki: "Ketik di sini, misalnya: kalus di bawah ibu jari", phUmum: "Ketik di sini, misalnya: pasien memakai tongkat", saranH: "Saran",
     e_LOCKED: "Scan tidak bisa dimulai. Pastikan kunci transportasi scanner (LOCK) terbuka dan scanner terpasang lengkap (kaca bawaan scanner harus terpasang), lalu ulangi.",
     e_BUSY: "Scanner sedang sibuk. Tunggu beberapa detik lalu coba lagi.",
     e_DISK_FULL: "Disk penuh. Kosongkan ruang (satu pemindaian butuh sekitar 35 MB) atau ganti folder data di Settings.",
@@ -163,12 +167,12 @@ const T = {
     e_C_NAME: "Enter the patient's name.", e_C_AGE: "The age must be a whole number from 0 to 120.", e_C_SEX: "Choose the sex.",
     e_C_TD: "Write the blood pressure like 120/80.", e_C_BB: "The body weight must be 20–250 kg.",
     scan: "Scan", left: "Left foot", right: "Right foot",
-    subStandL: "The patient stands with both feet on the platform, the left foot on the glass and the heel against the stop. Stand evenly and keep still until the scan ends.",
-    subStandR: "Right foot on the glass, heel against the stop. Stand evenly and keep still until the scan ends.",
-    subSitL: "The patient sits. Place the left foot on the glass, heel against the stop. Keep still until the scan ends.",
-    subSitR: "Place the right foot on the glass, heel against the stop. Keep still until the scan ends.",
+    subStandL: "The patient stands with both feet on the platform. Left foot inside the white frame, toes and heel two fingers from the tape. Stand evenly and keep still until the scan ends.",
+    subStandR: "Right foot inside the white frame, toes and heel two fingers from the tape. Stand evenly and keep still until the scan ends.",
+    subSitL: "The patient sits. Left foot inside the white frame, toes and heel two fingers from the tape. Keep still until the scan ends.",
+    subSitR: "The patient stays seated. Move the right foot into the white frame, toes and heel two fingers from the tape. Keep still until the scan ends.",
     doScan: "Start scan", scanning: "Scanning… keep the foot still", ready: "Ready", retry: "Try again",
-    turn: "Please turn around", turnSub: "Ask the patient to turn around to face the other side of the platform, then place the right foot on the glass with the heel against the stop.",
+    turn: "Please turn around", turnSub: "Ask the patient to turn around to face the other side of the platform, then place the right foot inside the white frame, toes and heel two fingers from the tape.",
     turnGo: "Scan the right foot →",
     review: "Review result", reviewSub: "Blue line = detected foot edge. Make sure it follows the foot.",
     chkFound: "Foot detected", chkInside: "Whole foot inside the area",
@@ -212,7 +216,7 @@ const T = {
     mark: "Mark by hand", markOff: "Done marking", markSub: "Tap the image to place a mark. Tap a mark to remove it.",
     mLabel: "Mark type", mKalus: "Callus", mLuka: "Wound", mLain: "Other", mLainPh: "type of mark", marks: "marks", noScan: "Not scanned yet",
     finish: "Save and finish ✓", finishing: "Saving…", toScan: "Save, continue scanning →", toList: "← Patient list",
-    done: "Patient done", doneSub: "All patient data is saved.", saved: "Saved to", conc: "Conclusion",
+    done: "Patient done", doneSub: "All patient data is saved.", saved: "Saved to", conc: "Screening result",
     nextP: "Next patient →", toHub: "Patient list", resBtn: "Measurement details →",
     e_BAD_IMAGE: "The scan is damaged or too small. Retake the scan.",
     dmg: "Some patient folders are damaged or incomplete", dmgHint: "Do not delete them. Tell the team.",
@@ -226,6 +230,10 @@ const T = {
     e_FILE_OPEN: "The Excel summary could not be updated because it is open. Close Excel; the file is updated again at the next save", e_PICTURE: "An analysis picture could not be made",
     e_TIMEOUT: "The scanner is not answering. Unplug and replug the USB cable, then try again.",
     e_NOT_FOUND: "Scanner not found. Check the USB cable and that the scanner is switched on.",
+    e_DISCONNECTED: "The scanner cable came loose during the scan. Plug the USB cable back in, wait for the green \"Scanner ready\", then press Try again.",
+    wLR: "This foot is {a} mm long, the {o} foot {b} mm: {d} mm apart. Feet usually differ by less than 1 cm. Check for curled toes, a cut-off heel or a moving foot, and retake if needed.",
+    noFootSure: "No foot in the picture. Press again to accept anyway",
+    phKaki: "Type here, for example: callus under the big toe", phUmum: "Type here, for example: patient uses a walking stick", saranH: "Advice",
     e_LOCKED: "The scan could not start. Check that the scanner's transport LOCK switch is open and that the scanner is fully assembled (its own glass panel must be in place), then try again.",
     e_BUSY: "The scanner is busy. Wait a few seconds and try again.",
     e_DISK_FULL: "The disk is full. Free some space (one scan needs about 35 MB) or change the data folder in Settings.",
@@ -382,6 +390,7 @@ function errText(raw) {
   const m = String(raw).match(/^([A-Z_]+):\s*(.*)$/s);
   if (!m) return esc(raw);
   const known = T[L]["e_" + m[1]];
+  if (m[1] === "FILE_OPEN" && known) return esc(`${known}: ${m[2].split(" could not")[0]}`); // file name only
   const withDetail = ["SCAN_FAILED", "BACKUP_FAILED", "PICTURE", "FILE_OPEN"].includes(m[1]);
   return esc(known ? (withDetail ? `${known}: ${m[2]}` : known) : raw);
 }
@@ -513,7 +522,7 @@ async function resumePatient(key) {
     const r = await invoke("resume_patient", { key });
     st.pat = r.info; st.side = r.info.next_side; st.error = "";
     if (r.pending) { st.scan = r.pending; st.screen = "review"; }
-    else if (st.side === "right" && hasScan(r.info.patient, "left")) { st.screen = "turn"; }
+    else if (st.side === "right" && hasScan(r.info.patient, "left") && r.info.patient.posisi !== "duduk") { st.screen = "turn"; }
     else if (st.side) { st.scan = null; st.screen = "scan"; }
     else { openInlow(); }
   } catch (e) { st.error = e; }
@@ -820,7 +829,7 @@ function formScreen(m) {
 function scanScreen(m) {
   const side = st.side, stand = st.pat.patient.posisi === "berdiri";
   const sub = t((stand ? "subStand" : "subSit") + (side === "left" ? "L" : "R"));
-  m.innerHTML = `<h1>${t("scan")} · ${sideName(side)}</h1><p class="sub">${sub}</p><div class="grid2"><div class="card"><div class="scanwin">${guideFoot(side)}</div></div>
+  m.innerHTML = `<h1>${t("scan")} · ${sideName(side)}</h1><p class="sub">${sub}</p>${noticeBox()}<div class="grid2"><div class="card"><div class="scanwin">${guideFoot(side)}</div></div>
     <div class="card"><div class="pname">${String(st.pat.patient.no).padStart(3, "0")} · ${esc(st.pat.patient.nama)}</div>${errBox()}<div id="sstate" style="margin:20px 0 14px;color:var(--mute)">${t("ready")}</div><div class="bar"><b id="sbar"></b></div>
     <div class="row" style="margin-top:26px"><button class="btn" id="sgo">${st.error ? t("retry") : t("doScan")}</button></div>
     <div class="row" style="margin-top:22px"><button class="btn bad" id="cancel" style="padding:10px 18px;font-size:15px">${t("cancelP")}</button></div></div></div>`;
@@ -847,10 +856,17 @@ function turnScreen(m) {
   $("#tgo").onclick = () => { st.side = "right"; st.scan = null; st.error = ""; st.screen = "scan"; render(); };
 }
 
+const LR_LIMIT_MM = 10;
 function reviewScreen(m) {
-  const side = st.side, s = st.scan, w = s.warnings;
+  const side = st.side, s = st.scan;
+  // the other foot, if already measured: real feet differ by less than ~1 cm, so a bigger gap means
+  // curled toes, a cut heel or a moving foot on one of them (negative tests 2026-11-19)
+  const other = side === "left" ? "right" : "left", om = st.pat.patient.scans?.find((e) => e.side === other)?.measurements;
+  const lrMm = s.measurements && om ? Math.abs(s.measurements.fl_mm - om.fl_mm) : 0, lrBad = lrMm > LR_LIMIT_MM;
+  const w = lrBad ? [...s.warnings, "LR_DIFF"] : s.warnings;
   const noFoot = w.includes("NO_FOOT"), edge = w.includes("EDGE"), ok = !w.length;
-  const warnText = [noFoot ? t("wNoFoot") : "", edge ? t("wEdge") : "", w.includes("ODD_SHAPE") ? t("wOdd") : "", w.includes("TWO_OBJECTS") ? t("wTwo") : ""].filter(Boolean).join(" ");
+  const lrText = lrBad ? t("wLR").replace("{a}", num(s.measurements.fl_mm, 0)).replace("{o}", sideName(other).toLowerCase()).replace("{b}", num(om.fl_mm, 0)).replace("{d}", num(lrMm, 0)) : "";
+  const warnText = [noFoot ? t("wNoFoot") : "", edge ? t("wEdge") : "", w.includes("ODD_SHAPE") ? t("wOdd") : "", w.includes("TWO_OBJECTS") ? t("wTwo") : "", lrText].filter(Boolean).join(" ");
   // outline switch: ON every time a new scan is reviewed
   const canTog = !noFoot && s.plain;
   m.innerHTML = `<h1>${t("review")} · ${sideName(side)}</h1><p class="sub">${t("reviewSub")}</p>${errBox()}<div class="grid2"><div class="card"><div class="scanwin" style="background:#10151f"><img id="rvimg" src="${s.preview}" alt="">
@@ -868,7 +884,7 @@ function reviewScreen(m) {
     try { await invoke("retake_scan", { key: st.pat.key, side }); st.scan = null; st.screen = "scan"; st.error = ""; } catch (e) { st.error = e; }
     render();
   };
-  $("#accept").onclick = async () => {
+  const doAccept = async () => {
     $("#accept").disabled = true; $("#accept").textContent = t("saving"); $("#retake").disabled = true;
     try {
       st.pat = takeWarn(await invoke("accept_scan", { key: st.pat.key, side, seconds: s.seconds, widthPx: s.width_px, heightPx: s.height_px, warnings: w }));
@@ -878,6 +894,8 @@ function reviewScreen(m) {
     } catch (e) { st.error = e; }
     render();
   };
+  if (noFoot) armed($("#accept"), t("acceptAnyway"), t("noFootSure"), doAccept); // a scan with no foot needs a second press
+  else $("#accept").onclick = doAccept;
 }
 
 // ---- point check ("Periksa titik"): right after each foot is accepted ----
@@ -918,7 +936,7 @@ async function openCheck(side, outline, back) {
 // where the patient goes once a foot is accepted and checked (or skipped)
 function afterFoot() {
   const next = st.pat.next_side;
-  if (next === "right") { st.side = "right"; st.screen = "turn"; }
+  if (next === "right") { st.side = "right"; st.screen = st.pat.patient.posisi === "duduk" ? "scan" : "turn"; st.scan = null; }
   else if (next === "left") { st.side = "left"; st.screen = "scan"; }
   else openInlow();
   render();
@@ -962,7 +980,7 @@ function checkSvg() {
     return `<g class="hdl${cls}" data-p="${id}"><circle cx="${p[0]}" cy="${p[1]}" r="13" fill="${col}" fill-opacity=".35" stroke="${col}" stroke-width="3.5"/><circle cx="${p[0]}" cy="${p[1]}" r="2.5" fill="${col}"/><circle cx="${p[0]}" cy="${p[1]}" r="26" fill="transparent"/>
     <text x="${lx}" y="${ly}" text-anchor="${an}" class="hlab">${esc(lab)}</text></g>`; };
   g += dot("fore", F, "#ffb703", t("lFore")) + dot("heel", Hl, "#ffb703", t("lHeel")) + dot("arch", A, "#ffb703", t("lArch")) + dot("hc", HC, "#ffffff", t("lHc")) + dot("toe", J, "#ffffff", t("lToe"));
-  const base = Y.outline && ck.outline ? ck.outline : v.preview;
+  const base = Y.outline && ck.outline && ck.stepI === 3 ? ck.outline : v.preview;
   // magnifier: the same picture 3x, clipped to a circle, shown while a point is held
   g += `<g id="lens" style="display:none;pointer-events:none"><clipPath id="lensclip"><circle id="lensc" r="95"/></clipPath><circle id="lensbg" r="97" fill="#000"/>
     <g clip-path="url(#lensclip)"><g id="lensimg"><image href="${base}" width="${v.preview_w}" height="${v.preview_h}"/></g></g>
@@ -1045,7 +1063,7 @@ function checkScreen(m) {
   const tog = (k, lab, ok = true) => (ok ? `<label class="ly"><input type="checkbox" data-ly="${k}" ${Y[k] ? "checked" : ""}> ${lab}</label>` : "");
   m.innerHTML = `<h1>${t("chk")} · ${sideName(ck.side)}</h1><p class="sub">${t("chkSub")}</p>${warnBox()}${errBox()}
     <div class="ckgrid"><div class="card" style="padding:16px"><div class="ckwin" id="ckimg">${checkSvg()}</div>
-      <div class="lys">${tog("outline", t("lyOutline"), !!ck.outline)}${tog("ai", t("lyAI"))}${tog("clarke", t("lyClarke"))}${tog("contact", t("lyContact"), !!v.contact_preview)}${tog("marks", t("lyMarks"), !!st.pat.patient.marks?.some((k) => k.side === ck.side))}</div>
+      <div class="lys">${tog("outline", t("lyOutline"), !!ck.outline && ck.stepI === 3)}${tog("ai", t("lyAI"))}${tog("clarke", t("lyClarke"))}${tog("contact", t("lyContact"), !!v.contact_preview)}${tog("marks", t("lyMarks"), !!st.pat.patient.marks?.some((k) => k.side === ck.side))}</div>
       ${Y.contact ? `<p class="muted" style="margin-top:6px">${t("contactCap")}</p>` : ""}</div>
     <div class="card">${ck.stepI < 3 ? guidePanel() : `<div class="muted" style="font-weight:700">${t("gAll")}</div><p class="muted" style="margin:4px 0 10px">${t("gAllSub")}</p><p class="cklegend"><span class="sw o"></span>${t("chkClarke")}</p><p class="cklegend"><span class="sw w"></span>${t("chkAxis")}</p>
       <div id="cknums"></div>
@@ -1155,9 +1173,9 @@ function notesScreen(m) {
   const N = st.nt;
   const lab = (k, txt) => `<button type="button" class="${N.label === k ? "on" : ""}" data-ml="${k}">${txt}</button>`;
   m.innerHTML = `<h1>${t("notes")}</h1><p class="sub">${t("notesSub")}</p>${warnBox()}${errBox()}
-    <div class="grid2"><div class="field"><label>${t("nKiri")}</label><textarea id="n_kiri" rows="3">${esc(N.notes.kiri)}</textarea></div>
-      <div class="field"><label>${t("nKanan")}</label><textarea id="n_kanan" rows="3">${esc(N.notes.kanan)}</textarea></div>
-      <div class="field" style="grid-column:1/-1"><label>${t("nUmum")}</label><textarea id="n_umum" rows="2">${esc(N.notes.umum)}</textarea></div></div>
+    <div class="grid2"><div class="field"><label>✎ ${t("nKiri")}</label><textarea id="n_kiri" rows="3" placeholder="${t("phKaki")}">${esc(N.notes.kiri)}</textarea></div>
+      <div class="field"><label>✎ ${t("nKanan")}</label><textarea id="n_kanan" rows="3" placeholder="${t("phKaki")}">${esc(N.notes.kanan)}</textarea></div>
+      <div class="field" style="grid-column:1/-1"><label>✎ ${t("nUmum")}</label><textarea id="n_umum" rows="2" placeholder="${t("phUmum")}">${esc(N.notes.umum)}</textarea></div></div>
     <div class="card"><div class="row"><h2 style="font-size:20px">${t("mark")}</h2><span class="chip" id="mkcount"></span>
       <button class="btn ${N.marking ? "ok" : "ghost"} right" id="mk_tog" style="${sbtn}">${N.marking ? "✓ " + t("markOff") : t("mark")}</button></div>
       ${N.marking ? `<p class="muted" style="margin:10px 0">${t("markSub")}</p><div class="row"><label style="margin:0">${t("mLabel")}</label><div class="seg small" style="flex:none">${lab("kalus", t("mKalus"))}${lab("luka", t("mLuka"))}${lab("lain", t("mLain"))}</div>
@@ -1185,7 +1203,8 @@ function finishedScreen(m) {
   m.innerHTML = `<h1>${t("done")}</h1><p class="sub">${t("doneSub")}</p>${warnBox()}${bkBad}${errBox()}<div class="card"><div class="row" style="gap:30px;flex-wrap:nowrap"><div class="big" style="color:var(--ok)">✓</div>
       <div style="flex:1"><div style="font-size:24px;font-weight:800">${String(p.no).padStart(3, "0")} · ${esc(p.nama)}</div>
       <div class="sub" style="margin:4px 0 0">${t("saved")} ${esc(dd?.path ? dd.path + "\\" + st.pat.key : st.pat.key)}</div>
-      ${row ? `<div class="concbox"><div class="muted">${t("conc")}</div><div>${esc(row.kesimpulan)}</div></div>` : ""}
+      ${row ? `<div class="concbox"><div class="concH">${t("conc")}</div>${(row.hasil ?? [row.kesimpulan]).map((l) => `<div class="concL">${esc(l)}</div>`).join("")}
+        ${row.saran?.length ? `<div class="concH" style="margin-top:12px">${t("saranH")}</div><ul class="saran">${row.saran.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>` : ""}</div>` : ""}
       ${inlowComplete(p.inlow) ? "" : `<span class="chip warn" style="margin-top:10px">${t("inlowNo")}</span>`}</div></div>
     <div class="row" style="margin-top:26px"><button class="btn ghost" id="d_det" style="${sbtn}">${t("resBtn")}</button><button class="btn ghost" id="d_hub" style="${sbtn}">${t("toHub")}</button>
       <button class="btn right" id="d_next">${t("nextP")}</button></div></div>`;
