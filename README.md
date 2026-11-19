@@ -1,50 +1,48 @@
 # SmartFoot Panorama
 
-SmartFoot Panorama is a Windows desktop app that turns an ordinary flatbed document scanner into a station for imaging the sole of the foot. A seated person rests one foot on a 10 mm acrylic window, a Canon CanoScan LiDE 300 scans it from below, and the app checks the image, saves it to a session folder and measures the footprint: foot length, foot width, contact area, the Cavanagh arch index and the Chippaux-Smirak index.
+SmartFoot Panorama is a Windows desktop app that turns an ordinary flatbed document scanner into a station for screening the sole of the foot. The person stands on a platform with one foot on a 10 mm acrylic window, a Canon CanoScan LiDE 300 scans it from below, and the app checks the image, saves it, measures the footprint and helps the operator record a short diabetic-foot risk assessment. Version 0.2 is built around a whole day of screening at a community health post: one session per day and place, named patient folders, both feet per patient, and a summary the operator can read back to the patient.
 
 ![Opening animation](docs/screenshots/00_opening.gif)
 
-The app was built in about two weeks alongside the hardware, and most of what it does today came from testing it against real scans on the real station. How it got here, including the plan that was dropped, the bugs that negative testing found and the measurements that shaped the calibration, is written up in [docs/JOURNEY.md](docs/JOURNEY.md).
+The app was built alongside the hardware, and most of what it does came from testing it against real scans on the real station. How version 0.1 got there, including the plan that was dropped and the bugs that negative testing found, is written up in [docs/JOURNEY.md](docs/JOURNEY.md).
 
 ## What it does
 
-The operator flow has four steps: enter brief patient details (no name, a pseudo-ID is generated), scan one foot at a time, review the result, and finish. On the review screen the app draws the outline it found, says whether the whole foot is inside the scan area, and shows the three main numbers with their measured precision. Every number has an information button that explains it in plain words, animates how it is measured on the patient's own scan and cites its source.
+A day starts with a session: the place and the operator's name, with the date filled in automatically. From the session list the operator adds a patient, enters the basic details, and scans the left foot. The patient then turns around on the platform and the right foot is scanned the same way; seated patients simply move the other foot onto the glass. After each scan the review screen shows the outline the app found, says whether the whole foot is inside the scan area, and warns when something looks wrong, for example a cut-off heel, an empty glass, or a left and right foot that differ in length by more than a centimetre, which is how curled toes and a moving foot show up.
 
-| Review | Arch index explained on the patient's scan |
+| Session list | Review with a length warning |
 |---|---|
-| ![Review screen](docs/screenshots/02_review.jpg) | ![Arch index info](docs/screenshots/03_info_arch_index.jpg) |
+| ![Session](docs/screenshots/v2/01_session.jpg) | ![Length warning](docs/screenshots/v2/07_length_warning.jpg) |
 
-Behind the review screen there is a measurement detail view where the two reference points of the foot axis (heel centre and second-toe tip) can be moved by hand. A corrected scan is flagged in the data, and one button puts the points back where the app placed them.
+Clarke's angle is measured on a contact map that shows which skin actually presses on the glass. The app places the three points itself, but its guess is never reported as a result on its own: the operator checks the points one at a time, with a right and a wrong example beside each, and only a checked angle gets a flat, normal or high label (cut-off from Pita-Fernández et al., 2015). A foot can be skipped when the queue is long, and the app reminds the operator of unchecked feet before the session ends.
 
-| Measurement details with adjusted points | Scale calibration in Settings |
+| Point check, one point at a time | Turning around for the right foot |
 |---|---|
-| ![Measurement details](docs/screenshots/06_details_adjusted_points.jpg) | ![Settings](docs/screenshots/07_settings_calibration.jpg) |
+| ![Point check](docs/screenshots/v2/03_point_check.jpg) | ![Turn around](docs/screenshots/v2/04_turn_around.jpg) |
 
-Around this core the app handles the things that go wrong at a real station. It watches the scanner and refuses to start when it is unplugged or locked, does a warm-up scan after a long idle, resumes a session that was interrupted by a crash or a closed window, mirrors every accepted scan to a second folder, blocks scanning when the data folder (for example a flash disk) is not reachable, and asks on a new laptop where the data should go. A short illustrated guide and a first-run tour explain the flow. The interface is in Indonesian by default with an English toggle.
+After both feet the operator fills in the INLOW 60-second foot screen as a tap form, adds notes or marks on the scan if needed, and finishes. The last screen gives a plain screening result per foot (arch shape, Arch Index, INLOW risk class) and the care advice that goes with the risk class. Everything is written to the patient's folder, to an Excel summary per session in the client's own column layout, to an Excel file covering all sessions, and to a research CSV.
+
+| INLOW form | Screening result |
+|---|---|
+| ![INLOW](docs/screenshots/v2/05_inlow.jpg) | ![Screening result](docs/screenshots/v2/06_screening_result.jpg) |
+
+Around this core the app handles the things that go wrong at a real station. It watches the scanner and stops scanning when it is unplugged or locked, explains a cable pulled mid-scan in plain words, resumes a patient after the app was closed, mirrors every save to a backup folder, keeps working when the Excel file is open, and refuses to scan when the data folder on the flash disk is not there. The interface is in Indonesian by default with an English toggle, and the "? Panduan" button opens the operator book that ships next to the app.
 
 ## Measured performance
 
-The scale was calibrated on the final case with a steel and a plastic ruler laid on the acrylic. Along the scan direction both rulers, on both their millimetre and inch scales, agree on 300.7 dpi within 0.1 %. Across the sensor the millimetre ticks are blurred out, so the inch marks give 299.5 dpi with about ±0.5 % uncertainty. Both values are written into every session file.
+The scale was calibrated on the final case with a steel and a plastic ruler laid on the acrylic: 300.7 dpi along the scan direction and 299.5 dpi across the sensor, both written into every session file.
 
-Repeatability was measured by placing the same right foot ten times, lifting it fully each time, under the black cloth with the room lights on. Two placements had curled toes or touched the edge and would have been retaken in normal use; over the remaining eight the app gives:
-
-| Value | Mean | Precision (half the range) |
-|---|---|---|
-| Foot length | 244.8 mm | ± 1.9 mm (0.8 %) |
-| Foot width | 94.1 mm | ± 1.7 mm (1.8 %) |
-| Arch index | 0.304 | ± 0.007 (2.2 %) |
-
-A tape measurement of the same foot gave 245 mm, 0.2 mm from the app's mean. These figures come from one foot of one person, so they describe how stable the station is, not how accurate it is across people.
+On 19 November 2026 the station was tested with the white tape frame and the black cloth, standing. Repeated scans of the same left foot gave a foot length of 253 to 255 mm, also with the foot slanted, without the cloth and with the trousers left down. The same session showed the limits: curled toes shortened the foot by up to 26 mm and a moving foot by about 10 mm without a warning from the scan itself, which is why version 0.2 compares the two feet. Clarke's angle for one foot came out at 40° and 51° in two separate checks by the same person, so point placement varies more than the outline, and that spread is what the mandatory check is meant to measure.
 
 ## Testing
 
-The app was tested on purpose against things going wrong before its first release build. The rule was that an accepted scan is never lost, a wrong number is never written silently, and every failure shows a message that says what to do. The automated suite covers empty glass, noise, tiny and corrupt images, a hanging scanner driver, two feet on the glass, a ruler mistaken for a foot, disk-full and unreachable backup folders, damaged settings files and crash recovery; a hands-on checklist covered unplugging, killing the app mid-save, two instances at once, a fake removable drive and a full disk. The tests, what each one found and how it was fixed are listed in [docs/NEGATIVE_TESTS.md](docs/NEGATIVE_TESTS.md).
+Version 0.1 was tested on purpose against things going wrong; the tests and fixes are listed in [docs/NEGATIVE_TESTS.md](docs/NEGATIVE_TESTS.md). Version 0.2 adds a hardware session on the real station (cut-off heel, empty glass, curled toes, moving foot, wrong foot, no cloth, USB pulled mid-scan, app closed mid-patient, Excel open, seated patients), and the fixes that came out of it.
 
 To run the tests, go to `src-tauri/` and run `cargo test`. Two tests also check the outline finder on real scans; they need the scan folders set in `SMARTFOOT_REF_SCANS` and `SMARTFOOT_CASE_SCANS` and skip themselves when the scans are not there.
 
 ## Building and running
 
-The app is a [Tauri 2](https://tauri.app) project: the image processing, scanner access and storage are in Rust (`src-tauri/src`), and the interface is plain HTML, CSS and JavaScript (`src/`). It runs on Windows 10 or 11 and talks to the scanner through Windows Image Acquisition, using the driverless eSCL route of the LiDE 300, which keeps more tonal range than the Canon driver.
+The app is a [Tauri 2](https://tauri.app) project: the image processing, scanner access and storage are in Rust (`src-tauri/src`), and the interface is plain HTML, CSS and JavaScript (`src/`). It runs on Windows 10 or 11 and talks to the scanner through Windows Image Acquisition, using the driverless eSCL route of the LiDE 300.
 
 ```
 npm install
@@ -52,11 +50,11 @@ npm run tauri dev      # run in development
 npm run tauri build    # portable exe and installers in src-tauri/target/release
 ```
 
-Ready-made builds are attached to the [releases](../../releases). The executables are not code-signed, so Windows SmartScreen asks for confirmation on first run (More info, then Run anyway).
+Ready-made builds and the operator book (Indonesian) are attached to the [releases](../../releases). The executables are not code-signed, so Windows SmartScreen asks for confirmation on first run (More info, then Run anyway).
 
 ## Limitations
 
-The arch index cut-offs published in the literature were made for standing footprints, and this station scans a seated foot, so the app shows the number without a flat, normal or high label. The outline along the inner arch can be jagged where the lifted arch fades into the background, and gaps between curled toes can leave small notches. The precision figures above come from a single foot. The app runs on Windows only and has been used with one scanner model.
+The Arch Index is measured on the outline of the foot, which includes the lifted arch, so the published cut-offs for ink footprints do not apply and the app shows the number without a label. Clarke's angle depends on where a person places three points; the app's own guess is often wrong on feet whose contact print splits, which is why it must be checked. The app does not yet notice when the wrong foot is on the glass, and light leaking in beside the heel can be read as part of the foot when the cloth does not cover it. The figures above come from one person's feet. The app runs on Windows only and has been used with one scanner model.
 
 ## License
 
