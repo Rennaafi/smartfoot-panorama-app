@@ -61,6 +61,22 @@ fn current_scale() -> measure::Scale {
 // ------------------------------------------------------------------------------------------------
 // Settings, scanner, backup
 
+/// The operator book next to SmartFoot.exe (flash disk: E:\SmartFoot\Panduan SmartFoot.pdf).
+pub const GUIDE_PDF: &str = "Panduan SmartFoot.pdf";
+
+/// "? Panduan": open the book PDF that sits next to the exe in the default PDF viewer.
+/// NOT_FOUND when it is not there (e.g. a development build), so the app can show its own pictures.
+#[tauri::command]
+fn open_guide() -> Result<String, String> {
+    let exe = std::env::current_exe().map_err(|e| e.to_string())?;
+    let pdf = exe.parent().map(|d| d.join(GUIDE_PDF)).ok_or("NOT_FOUND: no exe folder")?;
+    if !pdf.is_file() {
+        return Err(format!("NOT_FOUND: {}", pdf.display()));
+    }
+    tauri_plugin_opener::open_path(&pdf, None::<&str>).map_err(|e| e.to_string())?;
+    Ok(pdf.display().to_string())
+}
+
 /// Windows folder picker for the Settings page. `start` is the folder currently typed (if it exists the
 /// dialog opens there). Returns None when the user cancels.
 #[tauri::command]
@@ -815,6 +831,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             get_settings,
             pick_folder,
+            open_guide,
             set_settings,
             list_scanners,
             scanner_status,

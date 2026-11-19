@@ -64,6 +64,13 @@ const T = {
     lyOutline: "Garis tepi", lyAI: "Indeks lengkung", lyClarke: "Sudut Clarke", lyContact: "Peta kontak", lyMarks: "Tanda manual",
     contactCap: "Hijau terang = tertekan kuat, hijau redup = tertekan ringan.",
     lbl: { datar: "datar", normal: "normal", tinggi: "tinggi" }, okChk: "diperiksa", okSkip: "dilewati",
+    gOf: "Titik {n} dari 3", gNext: "Lanjut →", gPrev: "← Sebelumnya", gOk: "Benar", gAll: "Semua titik",
+    gStep: {
+      fore: ["Titik depan", "Geser ke tepi dalam telapak depan: bantalan di belakang ibu jari, di bagian hijau yang paling menonjol ke dalam.", "Bukan di ibu jari"],
+      heel: ["Titik tumit", "Geser ke tepi dalam tumit, di bagian hijau. Garis oranye menyentuh tepi dalam telapak depan dan tumit tanpa memotong bagian hijau.", "Bukan di ujung belakang tumit"],
+      arch: ["Titik lengkung", "Geser ke titik terdalam cekungan tepi dalam bagian hijau terang (kulit yang menekan kaca), bukan ke garis tepi kaki.", "Bukan di garis tepi luar kaki"],
+    },
+    gRef: "Cara mengukur: Pita-Fernández dkk. 2015, J Epidemiol 25(2).", gAllSub: "Periksa sekali lagi, lalu simpan. Titik putih (sumbu kaki) juga bisa digeser.",
     stNone: "belum diperiksa", ptCheck: "Pemeriksaan titik", hist: "pemeriksaan sebelumnya tersimpan di riwayat", recheck: "Periksa ulang",
     onlyUnchk: "Hanya yang belum diperiksa", allChecked: "Semua kaki sudah diperiksa.",
     remT: "Masih ada kaki yang belum diperiksa", remSub: "Untuk kaki di bawah ini, sudut Clarke tercatat sebagai perkiraan aplikasi tanpa label datar / normal / tinggi. Periksa sekarang, atau akhiri sesi saja; kaki ini tetap bisa diperiksa nanti di Detail pengukuran.",
@@ -185,6 +192,13 @@ const T = {
     lyOutline: "Outline", lyAI: "Arch index", lyClarke: "Clarke's angle", lyContact: "Contact map", lyMarks: "Manual marks",
     contactCap: "Bright green = pressed firmly, dim green = pressed lightly.",
     lbl: { datar: "flat", normal: "normal", tinggi: "high" }, okChk: "checked", okSkip: "skipped",
+    gOf: "Point {n} of 3", gNext: "Next →", gPrev: "← Back", gOk: "Right", gAll: "All points",
+    gStep: {
+      fore: ["Forefoot point", "Drag it to the inner edge of the forefoot: the pad behind the big toe, where the green bulges furthest inward.", "Not on the big toe"],
+      heel: ["Heel point", "Drag it to the inner edge of the heel, on the green. The orange line touches the inner edge of forefoot and heel without cutting the green.", "Not at the back of the heel"],
+      arch: ["Arch point", "Drag it to the deepest point of the inner curve of the bright green (skin pressing on the glass), not to the outline of the foot.", "Not on the outer outline of the foot"],
+    },
+    gRef: "Method: Pita-Fernández et al. 2015, J Epidemiol 25(2).", gAllSub: "Look once more, then save. The white points (foot axis) can be moved too.",
     stNone: "not checked", ptCheck: "Point check", hist: "earlier checks kept in the history", recheck: "Check again",
     onlyUnchk: "Only not checked", allChecked: "Every foot has been checked.",
     remT: "Some feet have not been checked", remSub: "For the feet below, Clarke's angle is recorded as the app's estimate without a flat / normal / high label. Check them now, or end the session anyway; they can still be checked later in Measurement details.",
@@ -870,7 +884,9 @@ function reviewScreen(m) {
 // Clarke's three points (orange) and the AI heel-centre / 2nd-toe points (white) are dragged on the
 // scan; "Titik sudah benar" saves them (confirm_points), "Lewati" records a reason (skip_points).
 // Only a confirmed check gives Clarke's angle its flat / normal / high label (in Rust and Excel).
-const ck = { side: null, view: null, outline: null, pts: null, auto: null, layers: null, skipOpen: false, drag: null, back: null };
+const ck = { side: null, view: null, outline: null, pts: null, auto: null, layers: null, skipOpen: false, drag: null, back: null, stepI: 0 };
+// guided order: one orange point at a time (steps 0-2), then all points + save (step 3)
+const CK_ORDER = ["fore", "heel", "arch"];
 const clarkeLabel = (deg) => (deg < 31 ? "datar" : deg <= 41 ? "normal" : "tinggi"); // same as measure::clarke_label
 function clarkeDeg(P, sc) {
   const mm = (q) => [q[0] * sc.x_mm_per_px, q[1] * sc.y_mm_per_px];
@@ -891,9 +907,9 @@ async function openCheck(side, outline, back) {
     const auto = { fore: [...g.fore], heel: [...g.heel], arch: [...g.arch], hc: [...m.heel_centre], toe: [...m.toe_tip] };
     const last = v.check?.status === "diperiksa" ? v.check.clarke_pts : null;
     Object.assign(ck, {
-      side, view: v, outline, auto, skipOpen: false, back: back ?? null, roughArmed: false,
+      side, view: v, outline, auto, skipOpen: false, back: back ?? null, roughArmed: false, stepI: last ? 3 : 0,
       pts: last ? { fore: [...last.fore], heel: [...last.heel], arch: [...last.arch], hc: [...m.heel_centre], toe: [...m.toe_tip] } : JSON.parse(JSON.stringify(auto)),
-      layers: { outline: !!outline, ai: false, clarke: true, contact: false, marks: false },
+      layers: { outline: !!outline, ai: false, clarke: true, contact: !!v.contact_preview, marks: false },
     });
     st.side = side; st.screen = "check"; st.error = "";
   } catch (e) { st.error = e; }
@@ -927,17 +943,23 @@ function checkSvg() {
   if (Y.marks) (st.pat.patient.marks ?? []).filter((k) => k.side === ck.side).forEach((k) => {
     g += `<circle cx="${k.x / d}" cy="${k.y / d}" r="${k.r / d}" fill="none" stroke="#ff8fab" stroke-width="3" stroke-dasharray="5 4"/><text x="${k.x / d}" y="${k.y / d - k.r / d - 6}" text-anchor="middle" class="mklab" style="font-size:16px">${esc(k.label)}</text>`;
   });
-  g += `<line x1="${HC[0]}" y1="${HC[1]}" x2="${J[0]}" y2="${J[1]}" stroke="#fff" stroke-width="2" stroke-dasharray="6 4" opacity=".85"/>`;
-  if (Y.clarke) {
+  const gi = ck.stepI;
+  if (gi === 3) g += `<line x1="${HC[0]}" y1="${HC[1]}" x2="${J[0]}" y2="${J[1]}" stroke="#fff" stroke-width="2" stroke-dasharray="6 4" opacity=".85"/>`;
+  if (Y.clarke || gi < 3) {
     const u = [Hl[0] - F[0], Hl[1] - F[1]], lu = Math.hypot(...u) || 1, w = [A[0] - F[0], A[1] - F[1]], lw = Math.hypot(...w) || 1, r = 46;
     const e1 = [F[0] - (u[0] / lu) * 60, F[1] - (u[1] / lu) * 60], e2 = [Hl[0] + (u[0] / lu) * 40, Hl[1] + (u[1] / lu) * 40];
     const p1 = [F[0] + (u[0] / lu) * r, F[1] + (u[1] / lu) * r], p2 = [F[0] + (w[0] / lw) * r, F[1] + (w[1] / lw) * r];
     const sweep = u[0] * w[1] - u[1] * w[0] > 0 ? 1 : 0;
-    g += `<line x1="${e1[0]}" y1="${e1[1]}" x2="${e2[0]}" y2="${e2[1]}" stroke="#ffb703" stroke-width="3"/><line x1="${F[0]}" y1="${F[1]}" x2="${A[0]}" y2="${A[1]}" stroke="#ffb703" stroke-width="3"/>
+    // during the guided steps a line appears once both of its points have been placed
+    if (gi >= 1) g += `<line x1="${e1[0]}" y1="${e1[1]}" x2="${e2[0]}" y2="${e2[1]}" stroke="#ffb703" stroke-width="3"/>`;
+    if (gi >= 2) g += `<line x1="${F[0]}" y1="${F[1]}" x2="${A[0]}" y2="${A[1]}" stroke="#ffb703" stroke-width="3"/>
       <path d="M${p1[0]} ${p1[1]} A${r} ${r} 0 0 ${sweep} ${p2[0]} ${p2[1]}" stroke="#ffb703" stroke-width="2.5" fill="none"/>`;
   }
   const dot = (id, p, col, lab) => { const [lx, ly, an] = labelAt(id, p, HC, J);
-    return `<g class="hdl" data-p="${id}"><circle cx="${p[0]}" cy="${p[1]}" r="13" fill="${col}" fill-opacity=".35" stroke="${col}" stroke-width="3.5"/><circle cx="${p[0]}" cy="${p[1]}" r="2.5" fill="${col}"/><circle cx="${p[0]}" cy="${p[1]}" r="26" fill="transparent"/>
+    // guided: points still to come are hidden, earlier ones are dimmed and fixed
+    const i = CK_ORDER.indexOf(id), cls = gi === 3 ? "" : i < 0 || i > gi ? null : i < gi ? " off" : " cur";
+    if (cls === null) return "";
+    return `<g class="hdl${cls}" data-p="${id}"><circle cx="${p[0]}" cy="${p[1]}" r="13" fill="${col}" fill-opacity=".35" stroke="${col}" stroke-width="3.5"/><circle cx="${p[0]}" cy="${p[1]}" r="2.5" fill="${col}"/><circle cx="${p[0]}" cy="${p[1]}" r="26" fill="transparent"/>
     <text x="${lx}" y="${ly}" text-anchor="${an}" class="hlab">${esc(lab)}</text></g>`; };
   g += dot("fore", F, "#ffb703", t("lFore")) + dot("heel", Hl, "#ffb703", t("lHeel")) + dot("arch", A, "#ffb703", t("lArch")) + dot("hc", HC, "#ffffff", t("lHc")) + dot("toe", J, "#ffffff", t("lToe"));
   const base = Y.outline && ck.outline ? ck.outline : v.preview;
@@ -976,13 +998,14 @@ function wireCheckDrag() {
     $("#lensx").setAttribute("d", `M${c[0] - 16} ${c[1]}H${c[0] + 16}M${c[0]} ${c[1] - 16}V${c[1] + 16}`);
   };
   svg.querySelectorAll(".hdl").forEach((h) => {
+    if (h.classList.contains("off")) return;
     h.onpointerdown = (e) => { e.preventDefault(); ck.drag = h.dataset.p; h.setPointerCapture(e.pointerId); h.classList.add("on"); lens(ck.pts[ck.drag].map((x) => x / d)); };
     h.onpointermove = (e) => {
       if (ck.drag !== h.dataset.p) return;
       const q = toSvg(e), p = [Math.min(Math.max(q.x, 0), v.preview_w), Math.min(Math.max(q.y, 0), v.preview_h)];
       ck.pts[ck.drag] = [p[0] * d, p[1] * d];
       moveHandle(h, p); lens(p); paintCheckLines(); paintCheckNums();
-      if (ck.roughArmed && !roughUntouched()) { ck.roughArmed = false; const okb = $("#ck_ok"); okb.textContent = t("confirm"); okb.parentElement.nextElementSibling?.classList.contains("warn") && okb.parentElement.nextElementSibling.remove(); }
+      if (ck.roughArmed && !roughUntouched() && $("#ck_ok")) { ck.roughArmed = false; const okb = $("#ck_ok"); okb.textContent = t("confirm"); okb.parentElement.nextElementSibling?.classList.contains("warn") && okb.parentElement.nextElementSibling.remove(); }
     };
     h.onpointerup = h.onpointercancel = () => { if (ck.drag !== h.dataset.p) return; ck.drag = null; h.classList.remove("on"); lens(null); };
   });
@@ -1008,6 +1031,15 @@ function paintCheckLines() {
   const first = svg.querySelector(".hdl");
   [...fresh.children].forEach((c) => { if (!c.classList.contains("hdl") && c.id !== "lens") svg.insertBefore(c, first); });
 }
+// right-hand panel during the guided steps: what to do with this one point + a right and a wrong
+// example (our own left-foot scan, mirrored copies *_r for the right foot; made by docs/check_examples)
+function guidePanel() {
+  const k = CK_ORDER[ck.stepI], [title, how, wrong] = t("gStep")[k], r = ck.side === "right" ? "_r" : "";
+  return `<div class="muted" style="font-weight:700">${t("gOf").replace("{n}", ck.stepI + 1)}</div><h2 style="margin:4px 0 8px">${title}</h2><p style="margin:0 0 12px;line-height:1.45">${how}</p>
+    <div class="ckex"><figure><img src="assets/ck_${k}_ok${r}.jpg" alt=""><figcaption class="g">✓ ${t("gOk")}</figcaption></figure><figure><img src="assets/ck_${k}_no${r}.jpg" alt=""><figcaption class="r">✗ ${wrong}</figcaption></figure></div>
+    <div class="row" style="margin-top:16px">${ck.stepI > 0 ? `<button class="btn ghost" id="ck_prev" style="${sbtn}">${t("gPrev")}</button>` : ""}<button class="btn ghost" id="ck_reset" style="${sbtn}">↺ ${t("reset")}</button></div>
+    <div class="row" style="margin-top:14px"><button class="btn ghost" id="ck_skip" style="${sbtn}">${t("skip")}</button><button class="btn right" id="ck_next">${t("gNext")}</button></div>`;
+}
 function checkScreen(m) {
   const v = ck.view, Y = ck.layers;
   const tog = (k, lab, ok = true) => (ok ? `<label class="ly"><input type="checkbox" data-ly="${k}" ${Y[k] ? "checked" : ""}> ${lab}</label>` : "");
@@ -1015,16 +1047,25 @@ function checkScreen(m) {
     <div class="ckgrid"><div class="card" style="padding:16px"><div class="ckwin" id="ckimg">${checkSvg()}</div>
       <div class="lys">${tog("outline", t("lyOutline"), !!ck.outline)}${tog("ai", t("lyAI"))}${tog("clarke", t("lyClarke"))}${tog("contact", t("lyContact"), !!v.contact_preview)}${tog("marks", t("lyMarks"), !!st.pat.patient.marks?.some((k) => k.side === ck.side))}</div>
       ${Y.contact ? `<p class="muted" style="margin-top:6px">${t("contactCap")}</p>` : ""}</div>
-    <div class="card"><p class="cklegend"><span class="sw o"></span>${t("chkClarke")}</p><p class="cklegend"><span class="sw w"></span>${t("chkAxis")}</p>
+    <div class="card">${ck.stepI < 3 ? guidePanel() : `<div class="muted" style="font-weight:700">${t("gAll")}</div><p class="muted" style="margin:4px 0 10px">${t("gAllSub")}</p><p class="cklegend"><span class="sw o"></span>${t("chkClarke")}</p><p class="cklegend"><span class="sw w"></span>${t("chkAxis")}</p>
       <div id="cknums"></div>
-      <div class="row" style="margin-top:18px"><button class="btn ghost" id="ck_reset" style="${sbtn}">↺ ${t("reset")}</button></div>
+      <div class="row" style="margin-top:18px"><button class="btn ghost" id="ck_prev" style="${sbtn}">${t("gPrev")}</button><button class="btn ghost" id="ck_reset" style="${sbtn}">↺ ${t("reset")}</button></div>
       <div class="row" style="margin-top:18px"><button class="btn ghost" id="ck_skip" style="${sbtn}">${t("skip")}</button><button class="btn ok right" id="ck_ok">${ck.roughArmed ? t("roughOk") : t("confirm")}</button></div>
-      ${ck.roughArmed ? `<div class="warn">${t("roughWarn")}</div>` : ""}
+      ${ck.roughArmed ? `<div class="warn">${t("roughWarn")}</div>` : ""}`}
       ${ck.back ? `<div class="row" style="margin-top:18px"><button class="btn ghost" id="ck_back" style="${sbtn}">${t("back")}</button></div>` : ""}
-      ${ck.skipOpen ? `<div class="skipbox"><div style="font-weight:700;margin-bottom:10px">${t("skipQ")}</div><div class="row">${Object.entries(t("skipR")).map(([k, lab]) => `<button class="btn ghost" data-skip="${k}" style="${sbtn}">${lab}</button>`).join("")}</div><p class="muted" style="margin-top:10px">${t("skipNote")}</p></div>` : ""}</div></div>`;
-  paintCheckNums(); wireCheckDrag();
+      ${ck.skipOpen ? `<div class="skipbox"><div style="font-weight:700;margin-bottom:10px">${t("skipQ")}</div><div class="row">${Object.entries(t("skipR")).map(([k, lab]) => `<button class="btn ghost" data-skip="${k}" style="${sbtn}">${lab}</button>`).join("")}</div><p class="muted" style="margin-top:10px">${t("skipNote")}</p></div>` : ""}
+      <p class="muted" style="margin-top:14px;font-size:12px">${t("gRef")}</p></div></div>`;
+  if (ck.stepI === 3) paintCheckNums();
+  wireCheckDrag();
+  const go = (i) => { ck.stepI = i; ck.skipOpen = false; render(); };
+  if ($("#ck_next")) $("#ck_next").onclick = () => go(ck.stepI + 1);
+  if ($("#ck_prev")) $("#ck_prev").onclick = () => go(ck.stepI - 1);
   m.querySelectorAll("[data-ly]").forEach((c) => (c.onchange = () => { Y[c.dataset.ly] = c.checked; render(); }));
-  $("#ck_reset").onclick = () => { ck.pts = JSON.parse(JSON.stringify(ck.auto)); ck.roughArmed = false; render(); };
+  $("#ck_reset").onclick = () => {
+    if (ck.stepI < 3) { const k = CK_ORDER[ck.stepI]; ck.pts[k] = [...ck.auto[k]]; }
+    else ck.pts = JSON.parse(JSON.stringify(ck.auto));
+    ck.roughArmed = false; render();
+  };
   $("#ck_skip").onclick = () => { ck.skipOpen = !ck.skipOpen; render(); };
   if ($("#ck_back")) $("#ck_back").onclick = () => { const b = ck.back; ck.back = null; b(); };
   const done = (info, text) => {
@@ -1037,7 +1078,7 @@ function checkScreen(m) {
     try { done(await invoke("skip_points", { key: st.pat.key, side: ck.side, reason: b.dataset.skip }), `${sideName(ck.side)}: ${t("okSkip")} (${esc(t("skipR")[b.dataset.skip])})`); }
     catch (e) { st.error = e; render(); }
   }));
-  $("#ck_ok").onclick = async () => {
+  if ($("#ck_ok")) $("#ck_ok").onclick = async () => {
     if (roughUntouched() && !ck.roughArmed) { ck.roughArmed = true; render(); return; }
     const b = $("#ck_ok"); b.disabled = true; b.textContent = t("saving");
     const P = ck.pts, deg = clarkeDeg(P, v.measurements.scale);

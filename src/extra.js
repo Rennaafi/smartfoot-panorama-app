@@ -323,7 +323,11 @@ function splash() {
 // top bar: logo next to the brand, guide button
 $("aside .brand").insertAdjacentHTML("afterbegin", LOGO("brand-logo"));
 $("aside .row").insertAdjacentHTML("afterbegin", `<button class="lang" id="guideBtn" type="button"></button>`);
-$("#guideBtn").onclick = () => openGuide(0);
+// the book PDF next to SmartFoot.exe; the built-in picture guide only when there is no PDF
+$("#guideBtn").onclick = async () => {
+  try { await window.__TAURI__.core.invoke("open_guide"); }
+  catch (e) { openGuide(0); }
+};
 const paintGuideBtn = () => { $("#guideBtn").textContent = x("guideBtn"); };
 paintGuideBtn();
 $("#lang").addEventListener("click", paintGuideBtn);
