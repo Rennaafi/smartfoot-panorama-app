@@ -123,6 +123,19 @@ const T = {
     e_DISK_FULL: "Disk penuh. Kosongkan ruang (satu pemindaian butuh sekitar 35 MB) atau ganti folder data di Settings.",
     e_SCAN_FAILED: "Pemindaian gagal", e_NOT_RESUMABLE: "Pasien ini sudah selesai atau dibatalkan.", e_BAD_STATION: "Kode laptop harus 1–4 huruf atau angka.",
     e_BACKUP_SAME: "Folder salinan harus berbeda dari folder data (bukan di dalamnya, bukan induknya).", e_BACKUP_FAILED: "Folder salinan tidak bisa dipakai", e_BACKUP_OFF: "Folder salinan belum diatur.",
+    shH: "Lembar hasil untuk pasien", shOpen: "Buka ringkasan", shSend: "Kirim lewat WhatsApp", shSent: "✓ Sudah terkirim", shOpening: "Membuka…",
+    sendSt: { tidak: "tidak dikirim", belum: "belum dikirim", ulang: "hasil berubah – kirim ulang", terkirim: "terkirim" },
+    shNoWa: "Kirim lewat WhatsApp butuh nomor WhatsApp dan persetujuan pasien (Data pasien).",
+    shOpened: "WhatsApp sudah dibuka di {via} dengan pesan yang sudah diketik. File PDF sudah disalin: klik kotak ketik di WhatsApp, tekan Ctrl+V, lalu Enter. Setelah pesan terkirim, tekan Sudah terkirim.",
+    shOpenedNoCopy: "WhatsApp sudah dibuka di {via} dengan pesan yang sudah diketik. File PDF tidak bisa disalin otomatis: lampirkan file \"{file}\" dari folder pasien, lalu kirim. Setelah terkirim, tekan Sudah terkirim.",
+    viaDesktop: "aplikasi WhatsApp", viaWeb: "browser (WhatsApp Web; masuk dulu bila diminta)",
+    shIncomplete: "Masih ada yang belum lengkap ({list}). Tekan lagi untuk tetap mengirim",
+    shSentAt: "Terkirim {when} oleh {by}", shFile: "File",
+    shSetH: "Lembar hasil pasien", shPeny: "Penyelenggara", shKontak: "Kontak", shPesan: "Pesan WhatsApp",
+    shSetNote: "Penyelenggara dan kontak tampil di kepala lembar hasil. Kosongkan bila tidak perlu.",
+    shPesanNote: "Kata dalam kurung kurawal diisi otomatis: {sapaan} (Bapak/Ibu), {nama}, {tanggal}, {tempat}. Kosongkan untuk memakai pesan bawaan.",
+    e_NO_CONSENT: "Tidak ada nomor WhatsApp, atau pasien belum setuju hasil dikirim.", e_NO_SHEET: "Lembar hasil dibuat setelah pasien selesai.",
+    e_SHEET: "Lembar hasil tidak bisa dibuat", e_FONT: "Huruf Segoe UI tidak ditemukan di Windows, jadi lembar hasil tidak bisa dibuat.", e_WA_OPEN: "WhatsApp tidak bisa dibuka",
     // settings, scanner, backup, data folder, first run
     set: "Pengaturan", setSub: "Pengaturan: folder data, scanner, salinan cadangan, dan kalibrasi skala.",
     dataf: "Folder data", saved2: "Tersimpan ✓", station: "Kode laptop", stationNote: "Awalan ID internal pasien, unik per laptop (1–4 huruf/angka). Jangan sama dengan laptop lain.",
@@ -262,6 +275,19 @@ const T = {
     e_DISK_FULL: "The disk is full. Free some space (one scan needs about 35 MB) or change the data folder in Settings.",
     e_SCAN_FAILED: "Scan failed", e_NOT_RESUMABLE: "This patient is already finished or cancelled.", e_BAD_STATION: "The laptop code needs 1–4 letters or digits.",
     e_BACKUP_SAME: "The backup folder must be different from the data folder (not inside it, not its parent).", e_BACKUP_FAILED: "The backup folder cannot be used", e_BACKUP_OFF: "No backup folder is set.",
+    shH: "Result sheet for the patient", shOpen: "Open the sheet", shSend: "Send by WhatsApp", shSent: "✓ It was sent", shOpening: "Opening…",
+    sendSt: { tidak: "not sent", belum: "not sent yet", ulang: "result changed – send again", terkirim: "sent" },
+    shNoWa: "Sending by WhatsApp needs a WhatsApp number and the patient's consent (Data pasien).",
+    shOpened: "WhatsApp is open in {via} with the message typed in. The PDF is copied: click the message box in WhatsApp, press Ctrl+V, then Enter. Once it is sent, press It was sent.",
+    shOpenedNoCopy: "WhatsApp is open in {via} with the message typed in. The PDF could not be copied: attach \"{file}\" from the patient folder, then send. Once it is sent, press It was sent.",
+    viaDesktop: "the WhatsApp app", viaWeb: "the browser (WhatsApp Web; log in first if asked)",
+    shIncomplete: "Some parts are not complete ({list}). Press again to send anyway",
+    shSentAt: "Sent {when} by {by}", shFile: "File",
+    shSetH: "Patient result sheet", shPeny: "Organiser", shKontak: "Contact", shPesan: "WhatsApp message",
+    shSetNote: "Organiser and contact appear in the sheet's header. Leave empty if not needed.",
+    shPesanNote: "Words in curly brackets are filled in: {sapaan} (Bapak/Ibu), {nama}, {tanggal}, {tempat}. Leave empty for the default message.",
+    e_NO_CONSENT: "No WhatsApp number, or the patient has not agreed to receive the result.", e_NO_SHEET: "The result sheet is made once the patient is finished.",
+    e_SHEET: "The result sheet could not be made", e_FONT: "The Segoe UI font was not found in Windows, so the result sheet cannot be made.", e_WA_OPEN: "WhatsApp could not be opened",
     set: "Settings", setSub: "Settings: data folder, scanner, backup copy and scale calibration.",
     dataf: "Data folder", saved2: "Saved ✓", station: "Laptop code", stationNote: "Prefix of internal patient IDs, unique per laptop (1–4 letters/digits). Never the same as another laptop.",
     scanner: "Scanner", auto: "Automatic (LiDE 300)", refresh: "↻ Refresh",
@@ -414,13 +440,16 @@ function errText(raw) {
   if (!m) return esc(raw);
   const known = T[L]["e_" + m[1]];
   if (m[1] === "FILE_OPEN" && known) return esc(`${known}: ${m[2].split(" could not")[0]}`); // file name only
-  const withDetail = ["SCAN_FAILED", "BACKUP_FAILED", "PICTURE", "FILE_OPEN"].includes(m[1]);
+  const withDetail = ["SCAN_FAILED", "BACKUP_FAILED", "PICTURE", "FILE_OPEN", "SHEET", "WA_OPEN"].includes(m[1]);
   return esc(known ? (withDetail ? `${known}: ${m[2]}` : known) : raw);
 }
 const errBox = () => (st.error ? `<div class="err">${errText(st.error)}</div>` : "");
 // file warnings from the last save (Excel open, picture failed): shown once, then cleared
 const warnBox = () => { const w = st.warn; st.warn = []; return w.length ? `<div class="warn">${w.map(errText).join("<br>")}</div>` : ""; };
 const takeWarn = (r) => { if (r?.file_warnings?.length) st.warn = r.file_warnings; return r; };
+
+// the same text as session::DEFAULT_WA_PESAN (shown as the example in Settings)
+const DEFAULT_WA_PESAN = "Halo {sapaan} {nama}, berikut hasil skrining kaki SmartFoot tanggal {tanggal} di {tempat}. Silakan buka file PDF terlampir.";
 
 // ---- small helpers ----
 const sideName = (s) => t(s === "left" ? "left" : "right");
@@ -542,6 +571,49 @@ async function goBack() {
 const backBtn = (style = sbtn) => `<button class="btn ghost" id="bk" style="${style}">${t("back")}</button>`;
 const sbtnS = "padding:10px 14px;font-size:15px"; // the INLOW bar is crowded: smaller outline buttons
 const wireBack = () => { if ($("#bk")) $("#bk").onclick = goBack; };
+
+// ---- the patient's result sheet: open it, send it by WhatsApp, record that it went out ----
+// info = PatientInfo (send, sheet, patient); ctx.by() = who sends (a name), ctx.after() = redraw.
+// st.wa = the WhatsApp chat just opened for a patient (paste instructions + "Sudah terkirim").
+function sheetBlock(info) {
+  const P = info.patient, can = !!(P.wa && P.wa_setuju), sent = P.kirim?.at(-1);
+  const stc = { terkirim: "ok", belum: "warn", ulang: "warn", tidak: "" }[info.send] ?? "";
+  const w = st.wa?.key === info.key ? st.wa : null;
+  const howTo = w ? t(w.copied ? "shOpened" : "shOpenedNoCopy").replace("{via}", t(w.via === "desktop" ? "viaDesktop" : "viaWeb")).replace("{file}", esc(w.sheet)) : "";
+  return `<div class="shbox"><div class="row" style="gap:10px"><b>${t("shH")}</b><span class="chip ${stc}">${t("sendSt")[info.send] ?? ""}</span></div>
+    ${info.sheet ? `<div class="muted" style="margin:6px 0 0;word-break:break-all">${t("shFile")}: ${esc(info.sheet)}</div>` : ""}
+    ${sent ? `<div class="muted" style="margin:4px 0 0">${t("shSentAt").replace("{when}", `${esc(sent.at.slice(0, 10))} ${fmtTime(sent.at)}`).replace("{by}", esc(sent.by))}</div>` : ""}
+    <div class="row" style="margin-top:12px"><button class="btn ghost" id="sh_open" style="${sbtnS}">${t("shOpen")}</button>
+      <button class="btn ${can ? "" : "ghost"}" id="sh_send" style="${sbtnS}" ${can ? "" : "disabled"}>${t("shSend")}</button></div>
+    ${can ? "" : `<p class="muted" style="margin:8px 0 0">${t("shNoWa")}</p>`}
+    ${w ? `<div class="okbox" style="margin:12px 0 0;font-weight:500">${howTo}</div><div class="row" style="margin-top:10px"><button class="btn ok" id="sh_sent" style="${sbtn}">${t("shSent")}</button></div>` : ""}
+    <div id="sherr"></div></div>`;
+}
+function wireSheet(info, ctx) {
+  const P = info.patient, err = (e) => { const b = $("#sherr"); if (b) b.innerHTML = `<div class="err" style="margin:10px 0 0">${errText(e)}</div>`; };
+  if ($("#sh_open")) $("#sh_open").onclick = async () => {
+    const b = $("#sh_open"); b.disabled = true; b.textContent = t("shOpening");
+    try { await invoke("open_sheet", { key: info.key }); } catch (e) { err(e); }
+    b.disabled = false; b.textContent = t("shOpen");
+  };
+  // still-open parts are said before sending: a second press sends anyway
+  const missing = [];
+  if (P.scans?.some((e) => e.measurements && e.check?.status !== "diperiksa")) missing.push(t("todoPt"));
+  if (!inlowComplete(P.inlow)) missing.push(t("todoIn"));
+  const send = async () => {
+    const b = $("#sh_send"); if (b) { b.disabled = true; b.textContent = t("shOpening"); }
+    try { const r = await invoke("send_whatsapp", { key: info.key }); st.wa = { key: info.key, ...r }; await ctx.after(); }
+    catch (e) { if (b) { b.disabled = false; b.textContent = t("shSend"); } err(e); }
+  };
+  if ($("#sh_send") && !$("#sh_send").disabled) {
+    if (missing.length) armed($("#sh_send"), t("shSend"), t("shIncomplete").replace("{list}", missing.join(", ")), send);
+    else $("#sh_send").onclick = send;
+  }
+  if ($("#sh_sent")) $("#sh_sent").onclick = async () => {
+    const by = await ctx.by(); if (!by) return;
+    try { const r = takeWarn(await invoke("mark_sent", { key: info.key, by })); st.wa = null; await ctx.after(r); } catch (e) { err(e); }
+  };
+}
 
 // ---- loading the session ----
 async function loadSesi() {
@@ -707,7 +779,8 @@ function patientCard() {
       `<button class="btn ghost" id="rs_notes" style="${sbtnS};white-space:nowrap">${t("notesEdit")}</button>`)}
     ${line(t("waH"), P.wa ? `<b>${esc(fmtWa(P.wa))}</b> <span class="chip ${P.wa_setuju ? "ok" : "warn"}">${P.wa_setuju ? t("waAgree") : t("waNoAgree")}</span>` : `<span class="muted">${t("waNone")}</span>`,
       `<button class="btn ghost" id="rs_wa" style="${sbtnS};white-space:nowrap">${t("waEdit")}</button>`)}
-    ${edits ? `<p class="muted" style="margin:10px 0 0">${edits} ${t("editsN")}</p>` : ""}</div>`;
+    ${edits ? `<p class="muted" style="margin:10px 0 0">${edits} ${t("editsN")}</p>` : ""}
+    ${P.completed ? `<div style="margin-top:14px">${sheetBlock(rs.pat)}</div>` : ""}</div>`;
 }
 // 6281234567890 -> 0812-3456-7890 (as people write it)
 const fmtWa = (w) => { const d = "0" + String(w).replace(/^62/, ""); return d.replace(/^(\d{4})(\d{4})(\d+)$/, "$1-$2-$3"); };
@@ -800,6 +873,11 @@ function researchScreen(m) {
   if ($("#rs_inl")) $("#rs_inl").onclick = editInlowLater;
   if ($("#rs_notes")) $("#rs_notes").onclick = editNotesLater;
   if ($("#rs_wa")) $("#rs_wa").onclick = editWaLater;
+  if (rs.pat?.patient.completed) wireSheet(rs.pat, {
+    // who sent it: the operator on duty, or after the session the name asked for changes
+    by: () => new Promise((res) => askEditor((name) => res(name ?? st.sesi?.sesi?.operator ?? rs.pat.patient.operator))),
+    after: async () => { await openResearch(rs.key); },
+  });
   $("#rback").onclick = back;
 }
 // open the point check outside the patient flow (from Detail pengukuran or the Akhiri sesi reminder);
@@ -954,10 +1032,12 @@ function formScreen(m) {
       <div class="field"><label>${t("td")} <span class="muted">(${t("opt")})</span></label><div class="unit"><input id="f_td" value="${esc(f.td)}" placeholder="${t("tdPh")}" inputmode="numeric"><span>mmHg</span></div></div>
       <div class="field"><label>${t("bb")} <span class="muted">(${t("opt")})</span></label><div class="unit"><input id="f_bb" type="number" min="20" max="250" step="0.1" value="${esc(f.bb)}" placeholder="60"><span>${t("bbU")}</span></div></div>
       <div class="field"><label>${t("pos")}</label>${seg("posisi", [["berdiri", t("posB")], ["duduk", t("posD")]])}<p class="muted" style="margin-top:6px">${t("posNote")}</p></div>
-      <div class="field"><label>${t("first")}</label>${seg("kaki_pertama", [["left", t("left")], ["right", t("right")]])}<p class="muted" style="margin-top:6px">${t("firstNote")}</p></div></div>
+      <div class="field"><label>${t("first")}</label>${seg("kaki_pertama", [["left", t("left")], ["right", t("right")]])}<p class="muted" style="margin-top:6px">${t("firstNote")}</p></div>
+      <div class="field"><label>${t("waNum")} <span class="muted">(${t("opt")})</span></label><input id="f_wa" value="${esc(f.wa ? fmtWa(f.wa) : "")}" placeholder="${t("waPh")}" inputmode="tel" maxlength="20" autocomplete="off"></div>
+      <div class="field" style="align-self:end"><label class="ly" style="margin:0 0 14px"><input type="checkbox" id="f_waok" ${f.wa_setuju ? "checked" : ""}> ${t("waConsent")}</label></div></div>
       <div class="row"><button class="btn ghost" id="f_back" style="${sbtn}">${t("back")}</button>
         <button class="btn right" id="go" ${st.busy ? "disabled" : ""}>${edit ? t("save") : st.busy ? t("starting") : t("goScan").replace("{kaki}", sideLow(f.kaki_pertama))}</button></div></div>`;
-  const keep = () => { f.nama = $("#f_nama").value; f.usia = $("#f_usia").value; f.td = $("#f_td").value; f.bb = $("#f_bb").value; };
+  const keep = () => { f.nama = $("#f_nama").value; f.usia = $("#f_usia").value; f.td = $("#f_td").value; f.bb = $("#f_bb").value; f.wa = $("#f_wa").value; f.wa_setuju = $("#f_waok").checked; };
   m.querySelectorAll("[data-kelamin]").forEach((b) => (b.onclick = () => { keep(); f.kelamin = b.dataset.kelamin; render(); }));
   m.querySelectorAll("[data-posisi]").forEach((b) => (b.onclick = () => { keep(); f.posisi = b.dataset.posisi; render(); }));
   m.querySelectorAll("[data-kaki_pertama]").forEach((b) => (b.onclick = () => { keep(); f.kaki_pertama = b.dataset.kaki_pertama; render(); }));
@@ -967,7 +1047,8 @@ function formScreen(m) {
     keep();
     const age = f.usia === "" ? NaN : Number(f.usia), bb = f.bb === "" ? null : Number(f.bb), td = f.td.replace(/\s/g, "");
     const bad = !f.nama.trim() ? "e_C_NAME" : !(Number.isInteger(age) && age >= 0 && age <= 120) ? "e_C_AGE" : !f.kelamin ? "e_C_SEX"
-      : td && !/^\d{2,3}\/\d{2,3}$/.test(td) ? "e_C_TD" : bb != null && !(bb >= 20 && bb <= 250) ? "e_C_BB" : null;
+      : td && !/^\d{2,3}\/\d{2,3}$/.test(td) ? "e_C_TD" : bb != null && !(bb >= 20 && bb <= 250) ? "e_C_BB"
+      : f.wa.trim() && !/^(\+?62|0)?8\d{8,11}$/.test(f.wa.replace(/[\s\-.()]/g, "")) ? "e_BAD_WA" : null;
     if (bad) { $("#ferr").innerHTML = `<div class="err">${t(bad)}</div>`; return; }
     const form = { nama: f.nama, usia: age, kelamin: f.kelamin, td, bb, posisi: f.posisi, kaki_pertama: f.kaki_pertama, wa: f.wa, wa_setuju: f.wa_setuju };
     if (edit) {
@@ -1398,12 +1479,16 @@ function finishedScreen(m) {
       <div class="sub" style="margin:4px 0 0">${t("saved")} ${esc(dd?.path ? dd.path + "\\" + st.pat.key : st.pat.key)}</div>
       ${row ? `<div class="concbox"><div class="concH">${t("conc")}</div>${(row.hasil ?? [row.kesimpulan]).map((l) => `<div class="concL">${esc(l)}</div>`).join("")}
         ${row.saran?.length ? `<div class="concH" style="margin-top:12px">${t("saranH")}</div><ul class="saran">${row.saran.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>` : ""}</div>` : ""}
-      ${inlowComplete(p.inlow) ? "" : `<span class="chip warn" style="margin-top:10px">${t("inlowNo")}</span>`}</div></div>
+      ${inlowComplete(p.inlow) ? "" : `<span class="chip warn" style="margin-top:10px">${t("inlowNo")}</span>`}${sheetBlock(st.pat)}</div></div>
     <div class="row" style="margin-top:26px">${backBtn()}<button class="btn ghost" id="d_det" style="${sbtn}">${t("resBtn")}</button><button class="btn ghost" id="d_hub" style="${sbtn}">${t("toHub")}</button>
       <button class="btn right" id="d_next">${t("nextP")}</button></div></div>`;
   $("#d_det").onclick = () => openResearch(st.pat.key, "finished");
   $("#d_hub").onclick = () => toHub();
   wireBack();
+  wireSheet(st.pat, {
+    by: async () => st.sesi?.sesi?.operator ?? p.operator,
+    after: async (r) => { if (r) st.pat = r; else st.pat = await invoke("get_patient", { key: st.pat.key }); render(); },
+  });
   $("#d_next").onclick = async () => { await loadSesi(); if (hubScreen() !== "sesi") { st.screen = hubScreen(); render(); return; } openForm(false); };
 }
 
@@ -1456,7 +1541,13 @@ function settingsScreen(m) {
     <div><div class="card" id="scpanel"></div><div class="card" style="margin-top:18px"><h2 style="font-size:20px;margin-bottom:6px">${t("cal")}</h2><p style="line-height:1.5">${t("calNote")}</p>
       ${calibAnim()}
       <h4 style="margin:14px 0 4px;font-size:14px;text-transform:uppercase;letter-spacing:.5px;color:var(--mute)">${X[L].scaleH}</h4><p class="muted" style="line-height:1.5">${X[L].scale}</p>${rulerFig()}
-      <p class="muted" style="line-height:1.5;margin-top:10px">${t("calCheck")}</p></div></div></div>
+      <p class="muted" style="line-height:1.5;margin-top:10px">${t("calCheck")}</p></div>
+      <div class="card" style="margin-top:18px"><h2 style="font-size:20px;margin-bottom:6px">${t("shSetH")}</h2><p class="muted" style="margin:0 0 12px">${t("shSetNote")}</p>
+        <label>${t("shPeny")}</label><input id="s_peny" value="${esc(c.penyelenggara ?? "")}" maxlength="120">
+        <label style="margin-top:12px">${t("shKontak")}</label><input id="s_kontak" value="${esc(c.kontak ?? "")}" maxlength="120" placeholder="0812-…">
+        <label style="margin-top:12px">${t("shPesan")}</label><textarea id="s_pesan" rows="4" maxlength="600" placeholder="${esc(DEFAULT_WA_PESAN)}">${esc(c.wa_pesan ?? "")}</textarea>
+        <p class="muted" style="margin:6px 0 10px">${esc(t("shPesanNote"))}</p>
+        <div class="row"><button class="btn ${st.flash === "sheet" ? "ok" : "ghost"}" id="s_shsave" style="padding:12px 18px;font-size:16px">${st.flash === "sheet" ? t("savedBtn") : t("save")}</button></div>${fieldErr("sheet")}</div></div></div>
     <div class="row" style="margin-top:22px"><button class="btn ghost" id="back">${t("back")}</button><button class="btn right" id="gores">${t("resBtn")}</button></div>`;
   paintPanel();
   $("#gores").onclick = () => openResearch(null, "settings");
@@ -1496,6 +1587,7 @@ function settingsScreen(m) {
     await refreshBk();
   };
   $("#s_dev").onchange = (e) => persist({ scanner: e.target.value || null });
+  $("#s_shsave").onclick = () => persist({ penyelenggara: $("#s_peny").value, kontak: $("#s_kontak").value, wa_pesan: $("#s_pesan").value }, "sheet");
   $("#s_ref").onclick = async () => { try { st.scanners = await invoke("list_scanners"); } catch (e) { st.error = e; } render(); pollScanner(); };
   $("#back").onclick = () => { st.screen = st.prev; st.error = ""; st.draft = {}; st.ferr = null; st.flash = null; render(); };
 }
