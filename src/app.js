@@ -78,7 +78,13 @@ const T = {
     },
     gRef: "Cara mengukur: Pita-Fernández dkk. 2015, J Epidemiol 25(2).", gAllSub: "Periksa sekali lagi, lalu simpan. Titik putih (sumbu kaki) juga bisa digeser.",
     stNone: "belum diperiksa", ptCheck: "Pemeriksaan titik", hist: "pemeriksaan sebelumnya tersimpan di riwayat", recheck: "Periksa ulang",
-    onlyUnchk: "Hanya yang belum diperiksa", allChecked: "Semua kaki sudah diperiksa.",
+    onlyUnchk: "Perlu dilengkapi", allChecked: "Tidak ada yang perlu dilengkapi.",
+    pdH: "Kelengkapan data", inlowFill: "Lengkapi INLOW →", inlowEdit: "Ubah INLOW", filledOf: "terisi",
+    notesNone: "Tidak ada catatan.", notesEdit: "Ubah catatan", waH: "WhatsApp", waNone: "Tidak ada nomor", waAgree: "setuju dikirim", waNoAgree: "belum setuju dikirim", waEdit: "Ubah",
+    waNum: "No. WhatsApp", waPh: "0812-3456-7890", waConsent: "Pasien setuju hasil dikirim lewat WhatsApp", waConsentNote: "Tanpa nomor, persetujuan tidak dicatat.",
+    editsN: "perubahan setelah pemeriksaan tercatat", whoT: "Siapa yang mengubah?", whoSub: "Sesi pasien ini sudah diakhiri, jadi perubahan dicatat bersama nama dan waktu.", whoPh: "Nama", whoGo: "Lanjut →",
+    edInlow: "Melengkapi INLOW", edSaved: "✓ Tersimpan", e_BAD_WA: "Nomor WhatsApp tidak valid. Tulis nomor HP, misalnya 0812-3456-7890.",
+    todoIn: "INLOW belum lengkap", todoPt: "titik belum diperiksa",
     remT: "Masih ada kaki yang belum diperiksa", remSub: "Untuk kaki di bawah ini, sudut Clarke tercatat sebagai perkiraan aplikasi tanpa label datar / normal / tinggi. Periksa sekarang, atau akhiri sesi saja; kaki ini tetap bisa diperiksa nanti di Detail pengukuran.",
     remEnd: "Tetap akhiri sesi",
     // INLOW
@@ -215,7 +221,13 @@ const T = {
     },
     gRef: "Method: Pita-Fernández et al. 2015, J Epidemiol 25(2).", gAllSub: "Look once more, then save. The white points (foot axis) can be moved too.",
     stNone: "not checked", ptCheck: "Point check", hist: "earlier checks kept in the history", recheck: "Check again",
-    onlyUnchk: "Only not checked", allChecked: "Every foot has been checked.",
+    onlyUnchk: "Needs completing", allChecked: "Nothing left to complete.",
+    pdH: "Completeness", inlowFill: "Complete INLOW →", inlowEdit: "Edit INLOW", filledOf: "filled",
+    notesNone: "No notes.", notesEdit: "Edit notes", waH: "WhatsApp", waNone: "No number", waAgree: "agreed to receive it", waNoAgree: "has not agreed", waEdit: "Edit",
+    waNum: "WhatsApp number", waPh: "0812-3456-7890", waConsent: "The patient agrees to receive the result by WhatsApp", waConsentNote: "Without a number, no consent is recorded.",
+    editsN: "changes after the screening recorded", whoT: "Who is making the change?", whoSub: "This patient's session has ended, so the change is recorded with a name and time.", whoPh: "Name", whoGo: "Continue →",
+    edInlow: "Completing INLOW", edSaved: "✓ Saved", e_BAD_WA: "The WhatsApp number is not valid. Write a mobile number, e.g. 0812-3456-7890.",
+    todoIn: "INLOW incomplete", todoPt: "points not checked",
     remT: "Some feet have not been checked", remSub: "For the feet below, Clarke's angle is recorded as the app's estimate without a flat / normal / high label. Check them now, or end the session anyway; they can still be checked later in Measurement details.",
     remEnd: "End the session anyway",
     inlow: "INLOW form", inlowSub: "Tap one choice per foot. Tap again to clear it. It may be saved incomplete.",
@@ -463,7 +475,7 @@ function stepDone(i) {
 }
 function stepReachable(i) {
   const p = st.pat?.patient;
-  if (!p || !PATIENT_SCREENS.includes(st.screen) || st.scanning || st.busy || i === stepIndex()) return false;
+  if (!p || !PATIENT_SCREENS.includes(st.screen) || st.scanning || st.busy || st.ed || i === stepIndex()) return false;
   // a scan waiting for Terima / a point check in progress: only Data pasien (fix a typo), then back here
   if (st.screen === "review" || st.screen === "check") return i === 0;
   // a foot: the next one to scan, or one already accepted (scanned again after a confirm)
@@ -473,7 +485,7 @@ function stepReachable(i) {
 }
 function steps() {
   const p = stepIndex();
-  $("#steps").classList.toggle("off", !st.pat || !PATIENT_SCREENS.includes(st.screen) || (st.screen === "check" && !!ck.back));
+  $("#steps").classList.toggle("off", !st.pat || !PATIENT_SCREENS.includes(st.screen) || (st.screen === "check" && !!ck.back) || !!st.ed);
   const names = [...t("steps")]; names[1] = sideName(order()[0]); names[2] = sideName(order()[1]);
   $("#steps").innerHTML = names.map((n, i) => {
     const done = stepDone(i) && i !== p, go = stepReachable(i);
@@ -557,7 +569,7 @@ function openNotes() {
 // keep the INLOW / notes drafts before leaving those screens; false = the save failed (stay)
 async function saveDrafts() {
   try {
-    if (st.screen === "inlow" && st.inlDirty) { st.pat = takeWarn(await invoke("save_inlow", { key: st.pat.key, inlow: st.inl })); st.inlDirty = false; }
+    if (st.screen === "inlow" && st.inlDirty) { st.pat = takeWarn(await invoke("save_inlow", { key: st.pat.key, inlow: st.inl, by: st.ed?.by ?? null })); st.inlDirty = false; }
     if (st.screen === "notes" && st.ntDirty) {
       keepNotes();
       await invoke("save_notes", { key: st.pat.key, notes: st.nt.notes });
@@ -616,14 +628,15 @@ const turnPic = `<svg viewBox="0 0 240 262"><rect x="40" y="30" width="160" heig
 
 // ---- measurement details ("Detail pengukuran"): all values, the point check, "Belum diperiksa" filter ----
 const rs = { list: [], sesi: null, key: null, pat: null, side: null, view: null, only: false, back: "sesi" };
-const rsSessions = () => rs.list.filter((s) => s.patients.some((p) => p.scans > 0 && (!rs.only || p.unchecked.length)));
-const rsPatients = () => (rs.list.find((s) => s.key === rs.sesi)?.patients ?? []).filter((p) => p.scans > 0 && (!rs.only || p.unchecked.length));
+// "Perlu dilengkapi" (rs.only): points not checked, INLOW incomplete or the result sheet still to send (PatientRow.todo)
+const rsSessions = () => rs.list.filter((s) => s.patients.some((p) => p.scans > 0 && (!rs.only || p.todo)));
+const rsPatients = () => (rs.list.find((s) => s.key === rs.sesi)?.patients ?? []).filter((p) => p.scans > 0 && (!rs.only || p.todo));
 async function loadView() { rs.view = rs.key && rs.side ? await invoke("get_scan_view", { key: rs.key, side: rs.side }) : null; }
 async function loadPatientRs() {
   rs.pat = rs.key ? await invoke("get_patient", { key: rs.key }) : null;
   const sides = rs.pat?.patient.scans.map((e) => e.side) ?? [];
   const row = rsPatients().find((p) => p.key === rs.key);
-  if (rs.only && row && !row.unchecked.includes(rs.side)) rs.side = row.unchecked[0];
+  if (rs.only && row?.unchecked.length && !row.unchecked.includes(rs.side)) rs.side = row.unchecked[0];
   if (!sides.includes(rs.side)) rs.side = sides.includes("left") ? "left" : sides[0] ?? null;
   await loadView();
 }
@@ -678,6 +691,85 @@ function checkCard() {
     ${hist ? `<p class="muted" style="margin:8px 0 0">${hist} ${t("hist")}</p>` : ""}
     <div class="row" style="margin-top:14px"><button class="btn ${c?.status === "diperiksa" ? "ghost" : ""}" id="rs_chk" style="${sbtn}">${c?.status === "diperiksa" ? t("recheck") : t("chk")} →</button></div></div>`;
 }
+// INLOW, notes and WhatsApp of the shown patient, each editable later (v0.3). The sheet / sending
+// part is added in step 4.
+function patientCard() {
+  const P = rs.pat?.patient; if (!P || !st.spec) return "";
+  const n = (f) => `${footFilled(f)}/${st.spec.items.length}`, full = inlowComplete(P.inlow);
+  const notes = [["kanan", P.notes?.kanan], ["kiri", P.notes?.kiri], ["umum", P.notes?.umum]].filter(([, x]) => x);
+  const edits = P.edits?.length ?? 0;
+  // one line per item: what it is, its state, and the button to change it
+  const line = (lab, val, btn) => `<div class="pdrow"><span class="pdl">${lab}</span><div class="pdv">${val}</div>${btn}</div>`;
+  return `<div class="card ckcard" style="margin-top:18px"><div class="ml" style="margin-bottom:6px">${t("pdH")}</div>
+    ${line("INLOW", `${full ? `<span class="chip ok">${t("inlowOk")}</span>` : `<span class="chip warn">${t("inlowNo")}</span>`}<div class="muted">${t("kanan")} ${n(P.inlow.kanan)} · ${t("kiri")} ${n(P.inlow.kiri)} ${t("filledOf")}</div>`,
+      `<button class="btn ${full ? "ghost" : ""}" id="rs_inl" style="${sbtnS};white-space:nowrap">${full ? t("inlowEdit") : t("inlowFill")}</button>`)}
+    ${line(t("notes"), notes.length ? `<div style="white-space:pre-line">${notes.map(([k, x]) => (k === "umum" ? esc(x) : `${t(k)}: ${esc(x)}`)).join("\n")}</div>` : `<span class="muted">${t("notesNone")}</span>`,
+      `<button class="btn ghost" id="rs_notes" style="${sbtnS};white-space:nowrap">${t("notesEdit")}</button>`)}
+    ${line(t("waH"), P.wa ? `<b>${esc(fmtWa(P.wa))}</b> <span class="chip ${P.wa_setuju ? "ok" : "warn"}">${P.wa_setuju ? t("waAgree") : t("waNoAgree")}</span>` : `<span class="muted">${t("waNone")}</span>`,
+      `<button class="btn ghost" id="rs_wa" style="${sbtnS};white-space:nowrap">${t("waEdit")}</button>`)}
+    ${edits ? `<p class="muted" style="margin:10px 0 0">${edits} ${t("editsN")}</p>` : ""}</div>`;
+}
+// 6281234567890 -> 0812-3456-7890 (as people write it)
+const fmtWa = (w) => { const d = "0" + String(w).replace(/^62/, ""); return d.replace(/^(\d{4})(\d{4})(\d+)$/, "$1-$2-$3"); };
+// who makes a change after the patient's session has ended (null = session still open: like the hub)
+function askEditor(go) {
+  const sesi = rs.list.find((x) => x.key === rs.sesi);
+  if (!sesi?.ended) return go(null);
+  const ops = st.settings?.operators ?? [];
+  modal(`<div class="mhead"><h3>${t("whoT")}</h3><button class="btn ghost mx" id="mx">✕</button></div><p class="muted" style="margin-bottom:14px">${t("whoSub")}</p>
+    ${ops.length ? `<div class="row" style="margin-bottom:12px">${ops.map((o) => `<button class="btn ghost" data-who="${esc(o)}" style="${sbtnS}">${esc(o)}</button>`).join("")}</div>` : ""}
+    <input id="who" value="${esc(rs.editor ?? "")}" placeholder="${t("whoPh")}" maxlength="60"><div id="whoerr"></div>
+    <div class="row" style="margin-top:18px"><button class="btn ghost" id="who_no" style="${sbtn}">${t("cancel")}</button><button class="btn right" id="who_go" style="${sbtn}">${t("whoGo")}</button></div>`);
+  document.querySelectorAll("#modal [data-who]").forEach((b) => (b.onclick = () => { $("#who").value = b.dataset.who; }));
+  $("#mx").onclick = $("#who_no").onclick = () => closeModal();
+  $("#who_go").onclick = () => {
+    const name = $("#who").value.trim();
+    if (!name) { $("#whoerr").innerHTML = `<div class="err" style="margin-top:8px">${t("e_EMPTY_NAME")}</div>`; return; }
+    rs.editor = name; closeModal(); go(name);
+  };
+}
+// INLOW from Detail pengukuran: the normal form, with Batal / Simpan instead of the patient flow
+function editInlowLater() {
+  askEditor((by) => {
+    const keep = { pat: st.pat, side: st.side };
+    st.pat = rs.pat;
+    st.ed = { by, back: async (saved) => { st.ed = null; st.pat = keep.pat; st.side = keep.side; if (saved) st.notice = t("edSaved"); await openResearch(rs.key); } };
+    openInlow(); render();
+  });
+}
+function editNotesLater() {
+  askEditor((by) => {
+    const N = rs.pat.patient.notes ?? {};
+    const box = (k, lab, ph, rows) => `<div class="field"><label>✎ ${lab}</label><textarea id="en_${k}" rows="${rows}" placeholder="${ph}">${esc(N[k] ?? "")}</textarea></div>`;
+    modal(`<div class="mhead"><h3>${t("notesEdit")}</h3><button class="btn ghost mx" id="mx">✕</button></div>
+      ${box("kanan", t("nKanan"), t("phKaki"), 3)}${box("kiri", t("nKiri"), t("phKaki"), 3)}${box("umum", t("nUmum"), t("phUmum"), 2)}<div id="enerr"></div>
+      <div class="row" style="margin-top:16px"><button class="btn ghost" id="en_no" style="${sbtn}">${t("cancel")}</button><button class="btn right" id="en_go" style="${sbtn}">${t("save")}</button></div>`, "wide");
+    $("#mx").onclick = $("#en_no").onclick = () => closeModal();
+    $("#en_go").onclick = async () => {
+      const notes = { kanan: $("#en_kanan").value, kiri: $("#en_kiri").value, umum: $("#en_umum").value };
+      $("#en_go").disabled = true;
+      try { takeWarn(await invoke("save_notes", { key: rs.key, notes, by })); closeModal(); st.notice = t("edSaved"); await openResearch(rs.key); }
+      catch (e) { $("#en_go").disabled = false; $("#enerr").innerHTML = `<div class="err" style="margin-top:8px">${errText(e)}</div>`; }
+    };
+  });
+}
+function editWaLater() {
+  askEditor((by) => {
+    const P = rs.pat.patient;
+    modal(`<div class="mhead"><h3>${t("waH")}</h3><button class="btn ghost mx" id="mx">✕</button></div>
+      <div class="field"><label>${t("waNum")} <span class="muted">(${t("opt")})</span></label><input id="ew_wa" value="${esc(P.wa ? fmtWa(P.wa) : "")}" placeholder="${t("waPh")}" inputmode="tel" maxlength="20"></div>
+      <label class="ly" style="margin-top:8px"><input type="checkbox" id="ew_ok" ${P.wa_setuju ? "checked" : ""}> ${t("waConsent")}</label>
+      <p class="muted" style="margin:6px 0 0">${t("waConsentNote")}</p><div id="ewerr"></div>
+      <div class="row" style="margin-top:16px"><button class="btn ghost" id="ew_no" style="${sbtn}">${t("cancel")}</button><button class="btn right" id="ew_go" style="${sbtn}">${t("save")}</button></div>`);
+    $("#mx").onclick = $("#ew_no").onclick = () => closeModal();
+    $("#ew_go").onclick = async () => {
+      $("#ew_go").disabled = true;
+      const who = by ?? st.sesi?.sesi?.operator ?? P.operator;
+      try { takeWarn(await invoke("save_contact", { key: rs.key, wa: $("#ew_wa").value, setuju: $("#ew_ok").checked, by: who })); closeModal(); st.notice = t("edSaved"); await openResearch(rs.key); }
+      catch (e) { $("#ew_go").disabled = false; $("#ewerr").innerHTML = `<div class="err" style="margin-top:8px">${errText(e)}</div>`; }
+    };
+  });
+}
 function researchScreen(m) {
   const back = () => { st.screen = rs.back; render(); };
   const filter = `<label class="ly" style="flex:none"><input type="checkbox" id="rs_only" ${rs.only ? "checked" : ""}> ${t("onlyUnchk")}</label>`;
@@ -690,10 +782,10 @@ function researchScreen(m) {
   m.innerHTML = `<h1>${t("res")}</h1><p class="sub">${t("resSub")}</p>${noticeBox()}${errBox()}
     <div class="row" style="margin-bottom:16px">${filter}
       <label style="margin:0">${t("resSess")}</label><select id="rs_sess" style="width:auto">${rsSessions().map((s) => `<option value="${esc(s.key)}" ${s.key == rs.sesi ? "selected" : ""}>${esc(s.date)} · ${esc(s.place)}</option>`).join("")}</select>
-      <label style="margin:0">${t("resPat")}</label><select id="rs_pat" style="width:auto">${rsPatients().map((p) => `<option value="${esc(p.key)}" ${p.key == rs.key ? "selected" : ""}>${String(p.no).padStart(3, "0")} ${esc(p.nama)}${p.unchecked.length ? " ●" : ""}</option>`).join("")}</select>
+      <label style="margin:0">${t("resPat")}</label><select id="rs_pat" style="width:auto">${rsPatients().map((p) => `<option value="${esc(p.key)}" ${p.key == rs.key ? "selected" : ""}>${String(p.no).padStart(3, "0")} ${esc(p.nama)}${p.todo ? " ●" : ""}</option>`).join("")}</select>
       <div class="seg" style="flex:none">${["left", "right"].filter((s) => scans.some((e) => e.side === s)).map(sideBtn).join("")}</div></div>
     <div class="grid2"><div class="card"><div class="scanwin" id="rsimg" style="background:#10151f"></div></div>
-    <div>${checkCard()}<div class="card" id="rsnums" style="margin-top:18px"></div></div></div>
+    <div>${checkCard()}${patientCard()}<div class="card" id="rsnums" style="margin-top:18px"></div></div></div>
     <div class="row" style="margin-top:22px"><button class="btn ghost" id="rback" style="${sbtn}">${t("back")}</button></div>`;
   const o = overlayAndNumbers();
   $("#rsimg").innerHTML = o.svg; $("#rsnums").innerHTML = o.nums;
@@ -705,6 +797,9 @@ function researchScreen(m) {
   $("#rs_pat").onchange = (e) => reload(async () => { rs.key = e.target.value; await loadPatientRs(); });
   m.querySelectorAll("[data-sd]").forEach((b) => (b.onclick = () => reload(async () => { rs.side = b.dataset.sd; await loadView(); })));
   if ($("#rs_chk")) $("#rs_chk").onclick = () => checkLater(rs.pat, rs.side, () => openResearch(rs.key));
+  if ($("#rs_inl")) $("#rs_inl").onclick = editInlowLater;
+  if ($("#rs_notes")) $("#rs_notes").onclick = editNotesLater;
+  if ($("#rs_wa")) $("#rs_wa").onclick = editWaLater;
   $("#rback").onclick = back;
 }
 // open the point check outside the patient flow (from Detail pengukuran or the Akhiri sesi reminder);
@@ -1211,9 +1306,11 @@ function inlowScreen(m) {
   const sum = (foot) => { const f = I[foot], n = footFilled(f), tot = footTotal(f), r = tot != null ? riskOf(tot) : null;
     return `<div class="isum"><b>${t(foot)}</b> · ${n}/${spec.items.length} ${t("filled")}${r ? ` · ${t("total")} <b>${tot}</b> · <span class="chip risk${r[1]}">${r[1]} ${esc(r[2])}</span>` : ""}</div>`; };
   const complete = footTotal(I.kanan) != null && footTotal(I.kiri) != null;
-  m.innerHTML = `<h1>${t("inlow")}</h1><p class="sub">${t("inlowSub")}</p>${noticeBox()}${warnBox()}${errBox()}
+  const edHead = st.ed ? `<div class="pname" style="margin-bottom:10px">${t("edInlow")} · ${String(st.pat.patient.no).padStart(3, "0")} ${esc(st.pat.patient.nama)}</div>` : "";
+  m.innerHTML = `<h1>${t("inlow")}</h1><p class="sub">${t("inlowSub")}</p>${edHead}${noticeBox()}${warnBox()}${errBox()}
     <div class="card"><div class="irow ihead"><div></div><div>${t("kanan")}</div><div>${t("kiri")}</div></div>${rows}</div>
-    <div class="ibar">${backBtn(sbtnS)}<button class="btn ghost" id="to_list" style="${sbtnS}">${t("toList")}</button>${sum("kanan")}${sum("kiri")}${complete ? "" : `<span class="chip warn">${t("inlowNo")}</span>`}<button class="btn right" id="i_next" style="${sbtn}">${t("toNotes")}</button></div>
+    ${st.ed ? `<div class="ibar"><button class="btn ghost" id="ed_no" style="${sbtnS}">${t("cancel")}</button>${sum("kanan")}${sum("kiri")}${complete ? "" : `<span class="chip warn">${t("inlowNo")}</span>`}<button class="btn ok right" id="ed_go" style="${sbtn}">${t("save")} ✓</button></div>`
+      : `<div class="ibar">${backBtn(sbtnS)}<button class="btn ghost" id="to_list" style="${sbtnS}">${t("toList")}</button>${sum("kanan")}${sum("kiri")}${complete ? "" : `<span class="chip warn">${t("inlowNo")}</span>`}<button class="btn right" id="i_next" style="${sbtn}">${t("toNotes")}</button></div>`}
     <p class="muted" style="margin-top:12px">${esc(spec.notes)}</p>`;
   m.querySelectorAll(".iopt").forEach((b) => (b.onclick = () => {
     const f = I[b.dataset.f], k = b.dataset.k, v = Number(b.dataset.v);
@@ -1227,6 +1324,11 @@ function inlowScreen(m) {
     if (f.questions.every((q) => q != null)) f.items.tanya = f.questions.some((q) => q) ? 2 : 0;
     st.inlDirty = true; render();
   }));
+  if (st.ed) {
+    $("#ed_no").onclick = () => st.ed.back(false);
+    $("#ed_go").onclick = async () => { $("#ed_go").disabled = true; if (await saveDrafts()) st.ed.back(true); };
+    return;
+  }
   $("#i_next").onclick = async () => { if (await saveDrafts()) { openNotes(); } };
   $("#to_list").onclick = async () => { if (await saveDrafts()) toHub(); };
   wireBack();
