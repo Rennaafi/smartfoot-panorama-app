@@ -2,7 +2,8 @@
 // screens and calls the commands in src-tauri/src/lib.rs.
 //
 // Flow (v2): a screening session ("sesi" = one day, one place, one laptop) holds patients. Each
-// patient goes Data pasien -> Kaki kiri -> (berbalik) -> Kaki kanan -> INLOW -> Catatan -> Selesai.
+// patient goes Data pasien -> first foot -> (berbalik) -> second foot -> INLOW -> Catatan -> Selesai.
+// The first foot is the patient's choice (kaki_pertama, v0.3); "← Kembali" goes one step back.
 const invoke = (cmd, args) => window.__TAURI__.core.invoke(cmd, args);
 
 const T = {
@@ -29,18 +30,23 @@ const T = {
     nama: "Nama", age: "Usia", ageU: "tahun", sex: "Jenis kelamin", f: "Perempuan", m: "Laki-laki",
     td: "Tekanan darah", tdPh: "120/80", bb: "Berat badan", bbU: "kg", opt: "opsional", req: "wajib",
     pos: "Posisi pemindaian", posB: "Berdiri", posD: "Duduk", posNote: "Bawaan = posisi pasien sebelumnya.",
-    goScan: "Mulai pindai kaki kiri →", starting: "Memeriksa scanner…", save: "Simpan", back: "← Kembali",
+    goScan: "Mulai pindai {kaki} →", starting: "Memeriksa scanner…", save: "Simpan", back: "← Kembali",
+    first: "Kaki pertama", firstNote: "Bawaan = pilihan pasien sebelumnya.", startFrom: "Mulai dari:",
+    rescanT: "Pindai ulang {kaki}?", rescanSub: "Hasil lama tidak dihapus: disimpan di folder \"ditolak\". Pemeriksaan titik kaki ini diulang setelah pindai ulang.", rescanGo: "Ya, pindai ulang", cancel: "Batal",
     e_C_NAME: "Isi nama pasien.", e_C_AGE: "Usia harus bilangan bulat 0–120.", e_C_SEX: "Pilih jenis kelamin.",
     e_C_TD: "Tekanan darah ditulis seperti 120/80.", e_C_BB: "Berat badan harus 20–250 kg.",
     // scan
     scan: "Pindai", left: "Kaki kiri", right: "Kaki kanan",
     subStandL: "Pasien berdiri dengan kedua kaki di platform. Kaki kiri di dalam bingkai putih, jari dan tumit dua jari dari selotip. Berdiri seimbang dan diam sampai pemindaian selesai.",
     subStandR: "Kaki kanan di dalam bingkai putih, jari dan tumit dua jari dari selotip. Berdiri seimbang dan diam sampai pemindaian selesai.",
-    subSitL: "Pasien duduk. Kaki kiri di dalam bingkai putih, jari dan tumit dua jari dari selotip. Diam sampai pemindaian selesai.",
-    subSitR: "Pasien tetap duduk. Pindahkan kaki kanan ke dalam bingkai putih, jari dan tumit dua jari dari selotip. Diam sampai pemindaian selesai.",
+    subStandR1: "Pasien naik ke platform dalam posisi berbalik (menghadap sisi lain platform), dengan kedua kaki di platform. Kaki kanan di dalam bingkai putih, jari dan tumit dua jari dari selotip. Berdiri seimbang dan diam sampai pemindaian selesai.",
+    subStandL2: "Kaki kiri di dalam bingkai putih, jari dan tumit dua jari dari selotip. Berdiri seimbang dan diam sampai pemindaian selesai.",
+    subSit1: "Pasien duduk. {Kaki} di dalam bingkai putih, jari dan tumit dua jari dari selotip. Diam sampai pemindaian selesai.",
+    subSit2: "Pasien tetap duduk. Pindahkan {kaki} ke dalam bingkai putih, jari dan tumit dua jari dari selotip. Diam sampai pemindaian selesai.",
     doScan: "Mulai pindai", scanning: "Memindai… jangan gerakkan kaki", ready: "Siap", retry: "Coba lagi",
     turn: "Silakan berbalik", turnSub: "Minta pasien berbalik badan menghadap sisi lain platform, lalu letakkan kaki kanan di dalam bingkai putih, jari dan tumit dua jari dari selotip.",
-    turnGo: "Pindai kaki kanan →",
+    turnSubL: "Minta pasien berbalik badan kembali menghadap sisi semula, lalu letakkan kaki kiri di dalam bingkai putih, jari dan tumit dua jari dari selotip.",
+    turnGo: "Pindai {kaki} →",
     review: "Tinjau hasil", reviewSub: "Garis biru = tepi kaki yang terdeteksi. Pastikan sesuai bentuk kaki.",
     chkFound: "Kaki terdeteksi", chkInside: "Kaki penuh di dalam area",
     wNoFoot: "Kaki tidak terdeteksi. Pastikan kaki menempel di kaca, lalu ulangi.",
@@ -85,7 +91,7 @@ const T = {
     nKiri: "Catatan kaki kiri", nKanan: "Catatan kaki kanan", nUmum: "Catatan pasien",
     mark: "Tandai secara manual", markOff: "Selesai menandai", markSub: "Ketuk gambar untuk memberi tanda. Ketuk tanda untuk menghapusnya.",
     mLabel: "Jenis tanda", mKalus: "Kalus", mLuka: "Luka", mLain: "Lainnya", mLainPh: "tulis jenis tanda", marks: "tanda", noScan: "Belum dipindai",
-    finish: "Simpan dan selesai ✓", finishing: "Menyimpan…", toScan: "Simpan, lanjut pindai →", toList: "← Daftar pasien",
+    finish: "Simpan dan selesai ✓", finishing: "Menyimpan…", toScan: "Simpan, lanjut pindai →", toList: "Daftar pasien",
     // finished
     done: "Pasien selesai", doneSub: "Semua data pasien tersimpan.", saved: "Tersimpan di", conc: "Hasil skrining",
     nextP: "Pasien berikutnya →", toHub: "Daftar pasien", resBtn: "Detail pengukuran →",
@@ -163,17 +169,22 @@ const T = {
     nama: "Name", age: "Age", ageU: "years", sex: "Sex", f: "Female", m: "Male",
     td: "Blood pressure", tdPh: "120/80", bb: "Body weight", bbU: "kg", opt: "optional", req: "required",
     pos: "Scan posture", posB: "Standing", posD: "Seated", posNote: "Default = the previous patient's posture.",
-    goScan: "Start scanning the left foot →", starting: "Checking the scanner…", save: "Save", back: "← Back",
+    goScan: "Start scanning the {kaki} →", starting: "Checking the scanner…", save: "Save", back: "← Back",
+    first: "First foot", firstNote: "Default = previous patient's choice.", startFrom: "Start with:",
+    rescanT: "Scan the {kaki} again?", rescanSub: "The old scan is not deleted: it is kept in the \"ditolak\" folder. This foot's point check is done again after the new scan.", rescanGo: "Yes, scan again", cancel: "Cancel",
     e_C_NAME: "Enter the patient's name.", e_C_AGE: "The age must be a whole number from 0 to 120.", e_C_SEX: "Choose the sex.",
     e_C_TD: "Write the blood pressure like 120/80.", e_C_BB: "The body weight must be 20–250 kg.",
     scan: "Scan", left: "Left foot", right: "Right foot",
     subStandL: "The patient stands with both feet on the platform. Left foot inside the white frame, toes and heel two fingers from the tape. Stand evenly and keep still until the scan ends.",
     subStandR: "Right foot inside the white frame, toes and heel two fingers from the tape. Stand evenly and keep still until the scan ends.",
-    subSitL: "The patient sits. Left foot inside the white frame, toes and heel two fingers from the tape. Keep still until the scan ends.",
-    subSitR: "The patient stays seated. Move the right foot into the white frame, toes and heel two fingers from the tape. Keep still until the scan ends.",
+    subStandR1: "The patient steps onto the platform turned around (facing the other side of the platform), both feet on the platform. Right foot inside the white frame, toes and heel two fingers from the tape. Stand evenly and keep still until the scan ends.",
+    subStandL2: "Left foot inside the white frame, toes and heel two fingers from the tape. Stand evenly and keep still until the scan ends.",
+    subSit1: "The patient sits. {Kaki} inside the white frame, toes and heel two fingers from the tape. Keep still until the scan ends.",
+    subSit2: "The patient stays seated. Move the {kaki} into the white frame, toes and heel two fingers from the tape. Keep still until the scan ends.",
     doScan: "Start scan", scanning: "Scanning… keep the foot still", ready: "Ready", retry: "Try again",
     turn: "Please turn around", turnSub: "Ask the patient to turn around to face the other side of the platform, then place the right foot inside the white frame, toes and heel two fingers from the tape.",
-    turnGo: "Scan the right foot →",
+    turnSubL: "Ask the patient to turn back to face the original side, then place the left foot inside the white frame, toes and heel two fingers from the tape.",
+    turnGo: "Scan the {kaki} →",
     review: "Review result", reviewSub: "Blue line = detected foot edge. Make sure it follows the foot.",
     chkFound: "Foot detected", chkInside: "Whole foot inside the area",
     wNoFoot: "No foot detected. Make sure the foot rests on the glass, then retake.",
@@ -215,7 +226,7 @@ const T = {
     nKiri: "Left foot note", nKanan: "Right foot note", nUmum: "Patient note",
     mark: "Mark by hand", markOff: "Done marking", markSub: "Tap the image to place a mark. Tap a mark to remove it.",
     mLabel: "Mark type", mKalus: "Callus", mLuka: "Wound", mLain: "Other", mLainPh: "type of mark", marks: "marks", noScan: "Not scanned yet",
-    finish: "Save and finish ✓", finishing: "Saving…", toScan: "Save, continue scanning →", toList: "← Patient list",
+    finish: "Save and finish ✓", finishing: "Saving…", toScan: "Save, continue scanning →", toList: "Patient list",
     done: "Patient done", doneSub: "All patient data is saved.", saved: "Saved to", conc: "Screening result",
     nextP: "Next patient →", toHub: "Patient list", resBtn: "Measurement details →",
     e_BAD_IMAGE: "The scan is damaged or too small. Retake the scan.",
@@ -401,6 +412,13 @@ const takeWarn = (r) => { if (r?.file_warnings?.length) st.warn = r.file_warning
 
 // ---- small helpers ----
 const sideName = (s) => t(s === "left" ? "left" : "right");
+const sideLow = (s) => sideName(s).toLowerCase();
+// the patient's scanning order (kaki_pertama first); before the patient exists, the form's choice
+const order = () => st.pat?.order ?? (st.form?.kaki_pertama === "right" ? ["right", "left"] : ["left", "right"]);
+// the patient form as the backend wants it, from a saved patient (keeps fields this screen does not show)
+const formOf = (p, patch = {}) => ({ nama: p.nama, usia: p.usia, kelamin: p.kelamin, td: p.td, bb: p.bb, posisi: p.posisi, kaki_pertama: p.kaki_pertama ?? "left", wa: p.wa ?? "", wa_setuju: !!p.wa_setuju, ...patch });
+// standing patients turn around between the feet; a scan screen right after the first foot goes via "Silakan berbalik"
+const needsTurn = (p) => p.posisi !== "duduk" && (p.scans?.length ?? 0) === 1;
 const hasScan = (p, side) => !!p?.scans?.some((e) => e.side === side);
 const isPaused = (s) => { const p = s?.sesi?.pauses; return !!p?.length && !p[p.length - 1].end; };
 const fmtDate = (iso) => { const d = new Date(iso.length <= 10 ? iso + "T00:00:00" : iso); return d.toLocaleDateString(L === "id" ? "id-ID" : "en-GB", { weekday: "long", day: "numeric", month: "long", year: "numeric" }); };
@@ -429,7 +447,8 @@ const PATIENT_SCREENS = ["pform", "scan", "turn", "review", "check", "inlow", "n
 function stepIndex() {
   switch (st.screen) {
     case "pform": return 0;
-    case "scan": case "review": case "check": return st.side === "left" ? 1 : 2;
+    case "scan": case "review": return st.side === order()[0] ? 1 : 2;
+    case "check": return ck.side === order()[0] ? 1 : 2;
     case "turn": return 2;
     case "inlow": return 3;
     case "notes": return 4;
@@ -439,19 +458,24 @@ function stepIndex() {
 }
 function stepDone(i) {
   const p = st.pat?.patient; if (!p) return false;
-  return [true, hasScan(p, "left"), hasScan(p, "right"), inlowComplete(p.inlow), !!(p.notes?.kiri || p.notes?.kanan || p.notes?.umum || p.marks?.length), p.completed][i];
+  const [a, b] = order();
+  return [true, hasScan(p, a), hasScan(p, b), inlowComplete(p.inlow), !!(p.notes?.kiri || p.notes?.kanan || p.notes?.umum || p.marks?.length), p.completed][i];
 }
 function stepReachable(i) {
   const p = st.pat?.patient;
-  if (!p || !PATIENT_SCREENS.includes(st.screen) || st.screen === "review" || st.screen === "check" || st.scanning || st.busy || i === stepIndex()) return false;
-  if (i === 1 || i === 2) return st.pat.next_side === (i === 1 ? "left" : "right");
+  if (!p || !PATIENT_SCREENS.includes(st.screen) || st.scanning || st.busy || i === stepIndex()) return false;
+  // a scan waiting for Terima / a point check in progress: only Data pasien (fix a typo), then back here
+  if (st.screen === "review" || st.screen === "check") return i === 0;
+  // a foot: the next one to scan, or one already accepted (scanned again after a confirm)
+  if (i === 1 || i === 2) { const side = order()[i - 1]; return st.pat.next_side === side || hasScan(p, side); }
   if (i === 5) return !st.pat.next_side;
   return true;
 }
 function steps() {
   const p = stepIndex();
   $("#steps").classList.toggle("off", !st.pat || !PATIENT_SCREENS.includes(st.screen) || (st.screen === "check" && !!ck.back));
-  $("#steps").innerHTML = t("steps").map((n, i) => {
+  const names = [...t("steps")]; names[1] = sideName(order()[0]); names[2] = sideName(order()[1]);
+  $("#steps").innerHTML = names.map((n, i) => {
     const done = stepDone(i) && i !== p, go = stepReachable(i);
     return `<button type="button" class="step ${done ? "done" : i == p ? "on" : ""} ${go ? "go" : ""}" data-step="${i}" ${go ? "" : "tabindex='-1'"}><i>${done ? "✓" : i + 1}</i><b>${n}</b></button>`;
   }).join("");
@@ -461,12 +485,51 @@ async function goStep(i) {
   if (!(await saveDrafts())) return;
   st.error = "";
   if (i === 0) { openForm(true); return; }
-  if (i === 1 || i === 2) { st.side = i === 1 ? "left" : "right"; st.scan = null; st.screen = "scan"; }
+  if (i === 1 || i === 2) {
+    const side = order()[i - 1];
+    if (hasScan(st.pat.patient, side)) { confirmRescan(side); return; }
+    st.side = side; st.screen = "scan";
+  }
   if (i === 3) openInlow();
   if (i === 4) { openNotes(); return; }
   if (i === 5) { await finishPatient(); return; }
   render();
 }
+
+// "Pindai ulang": an accepted foot is scanned again only after a confirm (the old scan goes to ditolak\)
+function confirmRescan(side) {
+  modal(`<div class="mhead"><h3>${t("rescanT").replace("{kaki}", sideLow(side))}</h3><button class="btn ghost mx" id="mx">✕</button></div><p style="line-height:1.5;margin-bottom:18px">${t("rescanSub")}</p>
+    <div class="row"><button class="btn ghost" id="rs_no" style="${sbtn}">${t("cancel")}</button><button class="btn right" id="rs_yes" style="${sbtn}">${t("rescanGo")}</button></div>`);
+  $("#mx").onclick = $("#rs_no").onclick = () => closeModal();
+  $("#rs_yes").onclick = () => { closeModal(); st.side = side; st.scan = null; st.scanSide = null; st.error = ""; st.screen = "scan"; render(); };
+}
+
+// "← Kembali": one step back in the patient's flow (drafts are saved first). A scan waiting for
+// Terima stays waiting (st.scan): coming back to that foot shows its review again.
+async function goBack() {
+  if (!(await saveDrafts())) return;
+  st.error = "";
+  const p = st.pat.patient, [first, second] = order(), stand = p.posisi !== "duduk";
+  const toCheck = (side, then) => (p.scans.find((e) => e.side === side)?.measurements ? openCheck(side, null, then) : openForm(true));
+  // the step before scanning `side`: Data pasien for the first foot; for the second the turn screen
+  // (standing) or the first foot's point check (sitting)
+  const beforeScan = (side) => {
+    if (side === first || !hasScan(p, first)) return openForm(true);
+    if (stand) { st.side = side; st.screen = "turn"; return render(); }
+    return toCheck(first, () => { st.side = second; st.screen = "scan"; render(); });
+  };
+  switch (st.screen) {
+    case "scan": case "review": return beforeScan(st.side);
+    case "turn": return toCheck(first, () => { st.screen = "turn"; render(); });
+    case "check": return beforeScan(ck.side);
+    case "inlow": { const last = [...order()].reverse().find((s) => hasScan(p, s)); return last ? toCheck(last, () => { openInlow(); render(); }) : openForm(true); }
+    case "notes": openInlow(); return render();
+    case "finished": return openNotes();
+  }
+}
+const backBtn = (style = sbtn) => `<button class="btn ghost" id="bk" style="${style}">${t("back")}</button>`;
+const sbtnS = "padding:10px 14px;font-size:15px"; // the INLOW bar is crowded: smaller outline buttons
+const wireBack = () => { if ($("#bk")) $("#bk").onclick = goBack; };
 
 // ---- loading the session ----
 async function loadSesi() {
@@ -479,8 +542,8 @@ async function toHub() { st.pat = null; st.scan = null; st.side = null; await lo
 // ---- patient actions ----
 function openForm(edit) {
   const p = edit ? st.pat?.patient : null;
-  st.form = p ? { nama: p.nama, usia: String(p.usia), kelamin: p.kelamin, td: p.td, bb: p.bb == null ? "" : String(p.bb), posisi: p.posisi, edit: true }
-    : { nama: "", usia: "", kelamin: "", td: "", bb: "", posisi: localStorage.getItem("lastPosisi") || "berdiri", edit: false };
+  st.form = p ? { nama: p.nama, usia: String(p.usia), kelamin: p.kelamin, td: p.td, bb: p.bb == null ? "" : String(p.bb), posisi: p.posisi, kaki_pertama: p.kaki_pertama ?? "left", wa: p.wa ?? "", wa_setuju: !!p.wa_setuju, edit: true }
+    : { nama: "", usia: "", kelamin: "", td: "", bb: "", posisi: localStorage.getItem("lastPosisi") || "berdiri", kaki_pertama: localStorage.getItem("lastFirst") || "left", wa: "", wa_setuju: false, edit: false };
   st.editBack = edit ? st.screen : null;
   if (!edit) st.pat = null;
   st.error = ""; st.screen = "pform"; render();
@@ -521,8 +584,8 @@ async function resumePatient(key) {
   try {
     const r = await invoke("resume_patient", { key });
     st.pat = r.info; st.side = r.info.next_side; st.error = "";
-    if (r.pending) { st.scan = r.pending; st.screen = "review"; }
-    else if (st.side === "right" && hasScan(r.info.patient, "left") && r.info.patient.posisi !== "duduk") { st.screen = "turn"; }
+    if (r.pending) { st.scan = r.pending; st.scanSide = st.side; st.screen = "review"; }
+    else if (st.side && needsTurn(r.info.patient)) { st.screen = "turn"; }
     else if (st.side) { st.scan = null; st.screen = "scan"; }
     else { openInlow(); }
   } catch (e) { st.error = e; }
@@ -795,12 +858,14 @@ function formScreen(m) {
       <div class="field"><label>${t("sex")} <span class="muted">(${t("req")})</span></label>${seg("kelamin", [["Perempuan", t("f")], ["Laki-laki", t("m")]])}</div>
       <div class="field"><label>${t("td")} <span class="muted">(${t("opt")})</span></label><div class="unit"><input id="f_td" value="${esc(f.td)}" placeholder="${t("tdPh")}" inputmode="numeric"><span>mmHg</span></div></div>
       <div class="field"><label>${t("bb")} <span class="muted">(${t("opt")})</span></label><div class="unit"><input id="f_bb" type="number" min="20" max="250" step="0.1" value="${esc(f.bb)}" placeholder="60"><span>${t("bbU")}</span></div></div>
-      <div class="field" style="grid-column:1/-1"><label>${t("pos")}</label>${seg("posisi", [["berdiri", t("posB")], ["duduk", t("posD")]])}<p class="muted" style="margin-top:6px">${t("posNote")}</p></div></div>
+      <div class="field"><label>${t("pos")}</label>${seg("posisi", [["berdiri", t("posB")], ["duduk", t("posD")]])}<p class="muted" style="margin-top:6px">${t("posNote")}</p></div>
+      <div class="field"><label>${t("first")}</label>${seg("kaki_pertama", [["left", t("left")], ["right", t("right")]])}<p class="muted" style="margin-top:6px">${t("firstNote")}</p></div></div>
       <div class="row"><button class="btn ghost" id="f_back" style="${sbtn}">${t("back")}</button>
-        <button class="btn right" id="go" ${st.busy ? "disabled" : ""}>${edit ? t("save") : st.busy ? t("starting") : t("goScan")}</button></div></div>`;
+        <button class="btn right" id="go" ${st.busy ? "disabled" : ""}>${edit ? t("save") : st.busy ? t("starting") : t("goScan").replace("{kaki}", sideLow(f.kaki_pertama))}</button></div></div>`;
   const keep = () => { f.nama = $("#f_nama").value; f.usia = $("#f_usia").value; f.td = $("#f_td").value; f.bb = $("#f_bb").value; };
   m.querySelectorAll("[data-kelamin]").forEach((b) => (b.onclick = () => { keep(); f.kelamin = b.dataset.kelamin; render(); }));
   m.querySelectorAll("[data-posisi]").forEach((b) => (b.onclick = () => { keep(); f.posisi = b.dataset.posisi; render(); }));
+  m.querySelectorAll("[data-kaki_pertama]").forEach((b) => (b.onclick = () => { keep(); f.kaki_pertama = b.dataset.kaki_pertama; render(); }));
   if (!edit) { paintGate(); invoke("data_dir_status").then((r) => { dd = r; paintGate(); }).catch(() => {}); }
   $("#f_back").onclick = () => { keep(); if (edit) { st.screen = st.editBack; if (st.screen === "inlow") openInlow(); if (st.screen === "notes") { openNotes(); return; } render(); } else toHub(); };
   $("#go").onclick = async () => {
@@ -809,7 +874,7 @@ function formScreen(m) {
     const bad = !f.nama.trim() ? "e_C_NAME" : !(Number.isInteger(age) && age >= 0 && age <= 120) ? "e_C_AGE" : !f.kelamin ? "e_C_SEX"
       : td && !/^\d{2,3}\/\d{2,3}$/.test(td) ? "e_C_TD" : bb != null && !(bb >= 20 && bb <= 250) ? "e_C_BB" : null;
     if (bad) { $("#ferr").innerHTML = `<div class="err">${t(bad)}</div>`; return; }
-    const form = { nama: f.nama, usia: age, kelamin: f.kelamin, td, bb, posisi: f.posisi };
+    const form = { nama: f.nama, usia: age, kelamin: f.kelamin, td, bb, posisi: f.posisi, kaki_pertama: f.kaki_pertama, wa: f.wa, wa_setuju: f.wa_setuju };
     if (edit) {
       try { st.pat = takeWarn(await invoke("update_patient", { key: st.pat.key, form })); st.error = ""; st.screen = st.editBack; if (st.screen === "inlow") openInlow(); if (st.screen === "notes") { openNotes(); return; } }
       catch (e) { st.error = e; }
@@ -818,8 +883,8 @@ function formScreen(m) {
     st.busy = true; st.error = ""; render();
     try {
       st.pat = await invoke("start_patient", { form });
-      localStorage.setItem("lastPosisi", f.posisi);
-      st.side = "left"; st.scan = null; st.screen = "scan";
+      localStorage.setItem("lastPosisi", f.posisi); localStorage.setItem("lastFirst", f.kaki_pertama);
+      st.side = st.pat.next_side; st.scan = null; st.scanSide = null; st.screen = "scan";
       sc.lock = false; if (sc.test && !sc.test.ok) sc.test = null;
     } catch (e) { st.error = e; noteScanError(e); }
     st.busy = false; render(); pollScanner();
@@ -827,19 +892,38 @@ function formScreen(m) {
 }
 
 function scanScreen(m) {
-  const side = st.side, stand = st.pat.patient.posisi === "berdiri";
-  const sub = t((stand ? "subStand" : "subSit") + (side === "left" ? "L" : "R"));
+  const side = st.side, p = st.pat.patient, stand = p.posisi === "berdiri";
+  // a scan of this foot is still waiting for Terima / Ulangi (the operator went back): show it again
+  if (st.scan && st.scanSide === side) { st.screen = "review"; reviewScreen(m); return; }
+  const firstFoot = side === order()[0], cap = (x) => x.charAt(0).toUpperCase() + x.slice(1);
+  const sub = stand ? t(side === "left" ? (firstFoot ? "subStandL" : "subStandL2") : (firstFoot ? "subStandR1" : "subStandR"))
+    : t(firstFoot ? "subSit1" : "subSit2").replace("{Kaki}", cap(sideLow(side))).replace("{kaki}", sideLow(side));
+  // before any foot is scanned the operator can still switch which foot goes first
+  const canSwitch = !p.scans?.length;
+  const sw = canSwitch ? `<div class="row" style="margin:0 0 16px;gap:10px"><span class="muted">${t("startFrom")}</span><div class="seg small" style="flex:none">${["left", "right"].map((s) => `<button type="button" class="${s === side ? "on" : ""}" data-first="${s}" style="white-space:nowrap">${sideName(s)}</button>`).join("")}</div></div>` : "";
   m.innerHTML = `<h1>${t("scan")} · ${sideName(side)}</h1><p class="sub">${sub}</p>${noticeBox()}<div class="grid2"><div class="card"><div class="scanwin">${guideFoot(side)}</div></div>
-    <div class="card"><div class="pname">${String(st.pat.patient.no).padStart(3, "0")} · ${esc(st.pat.patient.nama)}</div>${errBox()}<div id="sstate" style="margin:20px 0 14px;color:var(--mute)">${t("ready")}</div><div class="bar"><b id="sbar"></b></div>
+    <div class="card"><div class="pname">${String(p.no).padStart(3, "0")} · ${esc(p.nama)}</div>${errBox()}<div id="sstate" style="margin:20px 0 14px;color:var(--mute)">${t("ready")}</div><div class="bar"><b id="sbar"></b></div>
     <div class="row" style="margin-top:26px"><button class="btn" id="sgo">${st.error ? t("retry") : t("doScan")}</button></div>
-    <div class="row" style="margin-top:22px"><button class="btn bad" id="cancel" style="padding:10px 18px;font-size:15px">${t("cancelP")}</button></div></div></div>`;
+    <div style="margin-top:22px">${sw}</div>
+    <div class="row">${backBtn()}<button class="btn bad right" id="cancel" style="padding:10px 18px;font-size:15px">${t("cancelP")}</button></div></div></div>`;
   armed($("#cancel"), t("cancelP"), t("cancelSure"), cancelPatient);
+  wireBack();
+  m.querySelectorAll("[data-first]").forEach((b) => (b.onclick = async () => {
+    if (b.dataset.first === side) return;
+    m.querySelectorAll("button").forEach((x) => (x.disabled = true));
+    try {
+      st.pat = takeWarn(await invoke("update_patient", { key: st.pat.key, form: formOf(p, { kaki_pertama: b.dataset.first }) }));
+      localStorage.setItem("lastFirst", b.dataset.first); st.side = st.pat.next_side; st.error = "";
+    } catch (e) { st.error = e; }
+    render();
+  }));
   $("#sgo").onclick = async () => {
-    st.error = ""; $("#sgo").disabled = true; $("#sstate").textContent = t("scanning"); $("#cancel").disabled = true;
+    st.error = ""; $("#sgo").disabled = true; $("#sstate").textContent = t("scanning"); $("#cancel").disabled = true; $("#bk").disabled = true;
+    m.querySelectorAll("[data-first]").forEach((x) => (x.disabled = true));
     let p = 0; const iv = setInterval(() => { p += (95 - p) * 0.04; $("#sbar").style.width = p + "%"; }, 400);
     try {
       st.scanning = true; steps();
-      st.scan = await invoke("scan_foot", { key: st.pat.key, side });
+      st.scan = await invoke("scan_foot", { key: st.pat.key, side }); st.scanSide = side;
       clearInterval(iv); st.screen = "review"; sc.lock = false; if (sc.test && !sc.test.ok) sc.test = null;
     } catch (e) { clearInterval(iv); st.error = e; noteScanError(e); }
     st.scanning = false;
@@ -848,12 +932,16 @@ function scanScreen(m) {
 }
 
 function turnScreen(m) {
-  m.innerHTML = `<h1>${t("turn")}</h1><p class="sub">${t("turnSub")}</p>${noticeBox()}${warnBox()}${errBox()}<div class="card"><div class="row" style="gap:36px;flex-wrap:nowrap">
+  // the foot not scanned yet: right after a left-first start, left (turning back) after a right-first one.
+  // Not st.side: a look back at the first foot's check leaves st.side on that foot.
+  const target = st.pat.next_side ?? st.side ?? order()[1], sub = t(target === "left" ? "turnSubL" : "turnSub");
+  m.innerHTML = `<h1>${t("turn")}</h1><p class="sub">${sub}</p>${noticeBox()}${warnBox()}${errBox()}<div class="card"><div class="row" style="gap:36px;flex-wrap:nowrap">
     <div style="flex:0 0 260px">${turnPic}</div><div style="flex:1"><div class="pname">${String(st.pat.patient.no).padStart(3, "0")} · ${esc(st.pat.patient.nama)}</div>
-    <p style="font-size:20px;line-height:1.5;margin:14px 0 26px">${t("turnSub")}</p><button class="btn" id="tgo">${t("turnGo")}</button>
-    <div class="row" style="margin-top:22px"><button class="btn bad" id="cancel" style="padding:10px 18px;font-size:15px">${t("cancelP")}</button></div></div></div></div>`;
+    <p style="font-size:20px;line-height:1.5;margin:14px 0 26px">${sub}</p><button class="btn" id="tgo">${t("turnGo").replace("{kaki}", sideLow(target))}</button>
+    <div class="row" style="margin-top:22px">${backBtn()}<button class="btn bad right" id="cancel" style="padding:10px 18px;font-size:15px">${t("cancelP")}</button></div></div></div></div>`;
   armed($("#cancel"), t("cancelP"), t("cancelSure"), cancelPatient);
-  $("#tgo").onclick = () => { st.side = "right"; st.scan = null; st.error = ""; st.screen = "scan"; render(); };
+  wireBack();
+  $("#tgo").onclick = () => { st.side = target; st.error = ""; st.screen = "scan"; render(); };
 }
 
 const LR_LIMIT_MM = 10;
@@ -876,19 +964,20 @@ function reviewScreen(m) {
     <div class="row" style="margin-top:24px"><button class="btn ${ok ? "bad" : ""}" id="retake">↺ ${t("retake")}</button>
     <button class="btn ${ok ? "ok" : "ghost"} right" id="accept">${ok ? "✓ " + t("accept") : t("acceptAnyway")}</button></div>
     ${noFoot ? "" : metricsBlock(s.measurements)}
-    <div class="row" style="margin-top:22px"><button class="btn bad" id="cancel" style="padding:10px 18px;font-size:15px">${t("cancelP")}</button></div></div></div>`;
+    <div class="row" style="margin-top:22px">${backBtn()}<button class="btn bad right" id="cancel" style="padding:10px 18px;font-size:15px">${t("cancelP")}</button></div></div></div>`;
   armed($("#cancel"), t("cancelP"), t("cancelSure"), cancelPatient);
+  wireBack();
   if ($("#rvtog")) $("#rvtog").onchange = (e) => { $("#rvimg").src = e.target.checked ? s.preview : s.plain; };
   if (s.measurements) wireInfo($("#rvcard"), { img: s.plain || s.preview, w: s.preview_w, h: s.preview_h, down: s.width_px / s.preview_w, m: s.measurements });
   $("#retake").onclick = async () => {
-    try { await invoke("retake_scan", { key: st.pat.key, side }); st.scan = null; st.screen = "scan"; st.error = ""; } catch (e) { st.error = e; }
+    try { await invoke("retake_scan", { key: st.pat.key, side }); st.scan = null; st.scanSide = null; st.screen = "scan"; st.error = ""; } catch (e) { st.error = e; }
     render();
   };
   const doAccept = async () => {
     $("#accept").disabled = true; $("#accept").textContent = t("saving"); $("#retake").disabled = true;
     try {
       st.pat = takeWarn(await invoke("accept_scan", { key: st.pat.key, side, seconds: s.seconds, widthPx: s.width_px, heightPx: s.height_px, warnings: w }));
-      const outline = s.preview; st.scan = null; st.error = "";
+      const outline = s.preview; st.scan = null; st.scanSide = null; st.error = "";
       if (s.measurements) { await openCheck(side, outline); return; }
       afterFoot();
     } catch (e) { st.error = e; }
@@ -936,8 +1025,7 @@ async function openCheck(side, outline, back) {
 // where the patient goes once a foot is accepted and checked (or skipped)
 function afterFoot() {
   const next = st.pat.next_side;
-  if (next === "right") { st.side = "right"; st.screen = st.pat.patient.posisi === "duduk" ? "scan" : "turn"; st.scan = null; }
-  else if (next === "left") { st.side = "left"; st.screen = "scan"; }
+  if (next) { st.side = next; st.screen = needsTurn(st.pat.patient) ? "turn" : "scan"; }
   else openInlow();
   render();
 }
@@ -1070,7 +1158,7 @@ function checkScreen(m) {
       <div class="row" style="margin-top:18px"><button class="btn ghost" id="ck_prev" style="${sbtn}">${t("gPrev")}</button><button class="btn ghost" id="ck_reset" style="${sbtn}">↺ ${t("reset")}</button></div>
       <div class="row" style="margin-top:18px"><button class="btn ghost" id="ck_skip" style="${sbtn}">${t("skip")}</button><button class="btn ok right" id="ck_ok">${ck.roughArmed ? t("roughOk") : t("confirm")}</button></div>
       ${ck.roughArmed ? `<div class="warn">${t("roughWarn")}</div>` : ""}`}
-      ${ck.back ? `<div class="row" style="margin-top:18px"><button class="btn ghost" id="ck_back" style="${sbtn}">${t("back")}</button></div>` : ""}
+      <div class="row" style="margin-top:18px">${ck.back ? `<button class="btn ghost" id="ck_back" style="${sbtn}">${t("back")}</button>` : backBtn()}</div>
       ${ck.skipOpen ? `<div class="skipbox"><div style="font-weight:700;margin-bottom:10px">${t("skipQ")}</div><div class="row">${Object.entries(t("skipR")).map(([k, lab]) => `<button class="btn ghost" data-skip="${k}" style="${sbtn}">${lab}</button>`).join("")}</div><p class="muted" style="margin-top:10px">${t("skipNote")}</p></div>` : ""}
       <p class="muted" style="margin-top:14px;font-size:12px">${t("gRef")}</p></div></div>`;
   if (ck.stepI === 3) paintCheckNums();
@@ -1086,6 +1174,7 @@ function checkScreen(m) {
   };
   $("#ck_skip").onclick = () => { ck.skipOpen = !ck.skipOpen; render(); };
   if ($("#ck_back")) $("#ck_back").onclick = () => { const b = ck.back; ck.back = null; b(); };
+  wireBack();
   const done = (info, text) => {
     st.pat = takeWarn(info); st.notice = text;
     if (ck.back) { const b = ck.back; ck.back = null; b(); return; }
@@ -1124,7 +1213,7 @@ function inlowScreen(m) {
   const complete = footTotal(I.kanan) != null && footTotal(I.kiri) != null;
   m.innerHTML = `<h1>${t("inlow")}</h1><p class="sub">${t("inlowSub")}</p>${noticeBox()}${warnBox()}${errBox()}
     <div class="card"><div class="irow ihead"><div></div><div>${t("kanan")}</div><div>${t("kiri")}</div></div>${rows}</div>
-    <div class="ibar"><button class="btn ghost" id="to_list" style="${sbtn}">${t("toList")}</button>${sum("kanan")}${sum("kiri")}${complete ? "" : `<span class="chip warn">${t("inlowNo")}</span>`}<button class="btn right" id="i_next" style="${sbtn}">${t("toNotes")}</button></div>
+    <div class="ibar">${backBtn(sbtnS)}<button class="btn ghost" id="to_list" style="${sbtnS}">${t("toList")}</button>${sum("kanan")}${sum("kiri")}${complete ? "" : `<span class="chip warn">${t("inlowNo")}</span>`}<button class="btn right" id="i_next" style="${sbtn}">${t("toNotes")}</button></div>
     <p class="muted" style="margin-top:12px">${esc(spec.notes)}</p>`;
   m.querySelectorAll(".iopt").forEach((b) => (b.onclick = () => {
     const f = I[b.dataset.f], k = b.dataset.k, v = Number(b.dataset.v);
@@ -1140,6 +1229,7 @@ function inlowScreen(m) {
   }));
   $("#i_next").onclick = async () => { if (await saveDrafts()) { openNotes(); } };
   $("#to_list").onclick = async () => { if (await saveDrafts()) toHub(); };
+  wireBack();
 }
 
 const MARK_R = 120; // full-resolution pixels, about 10 mm
@@ -1182,17 +1272,18 @@ function notesScreen(m) {
         ${N.label === "lain" ? `<input id="mk_other" value="${esc(N.other)}" placeholder="${t("mLainPh")}" maxlength="40" style="width:240px">` : ""}</div>` : ""}
       <div class="grid2" style="margin-top:14px"><div><div class="muted" style="margin-bottom:6px">${t("left")}</div><div class="mkbox" id="mk_left"></div></div>
         <div><div class="muted" style="margin-bottom:6px">${t("right")}</div><div class="mkbox" id="mk_right"></div></div></div></div>
-    <div class="row" style="margin-top:22px"><button class="btn ghost" id="to_list" style="${sbtn}">${t("toList")}</button><button class="btn right" id="n_done">${st.pat.next_side ? t("toScan") : t("finish")}</button></div>`;
+    <div class="row" style="margin-top:22px">${backBtn()}<button class="btn ghost" id="to_list" style="${sbtn}">${t("toList")}</button><button class="btn right" id="n_done">${st.pat.next_side ? t("toScan") : t("finish")}</button></div>`;
   ["kiri", "kanan", "umum"].forEach((k) => ($("#n_" + k).oninput = () => { st.ntDirty = true; }));
   $("#mk_tog").onclick = () => { keepNotes(); N.marking = !N.marking; render(); };
   m.querySelectorAll("[data-ml]").forEach((b) => (b.onclick = () => { keepNotes(); N.label = b.dataset.ml; render(); }));
   if ($("#mk_other")) $("#mk_other").oninput = (e) => { N.other = e.target.value; };
   paintMarks(); paintMarkCount();
   $("#to_list").onclick = async () => { if (await saveDrafts()) toHub(); };
+  wireBack();
   $("#n_done").onclick = async () => {
     const b = $("#n_done"); b.disabled = true; b.textContent = t("finishing");
     if (!(await saveDrafts())) return;
-    if (st.pat.next_side) { st.side = st.pat.next_side; st.screen = hasScan(st.pat.patient, "left") ? "turn" : "scan"; render(); return; }
+    if (st.pat.next_side) { st.side = st.pat.next_side; st.screen = needsTurn(st.pat.patient) ? "turn" : "scan"; render(); return; }
     await finishPatient();
   };
 }
@@ -1206,10 +1297,11 @@ function finishedScreen(m) {
       ${row ? `<div class="concbox"><div class="concH">${t("conc")}</div>${(row.hasil ?? [row.kesimpulan]).map((l) => `<div class="concL">${esc(l)}</div>`).join("")}
         ${row.saran?.length ? `<div class="concH" style="margin-top:12px">${t("saranH")}</div><ul class="saran">${row.saran.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>` : ""}</div>` : ""}
       ${inlowComplete(p.inlow) ? "" : `<span class="chip warn" style="margin-top:10px">${t("inlowNo")}</span>`}</div></div>
-    <div class="row" style="margin-top:26px"><button class="btn ghost" id="d_det" style="${sbtn}">${t("resBtn")}</button><button class="btn ghost" id="d_hub" style="${sbtn}">${t("toHub")}</button>
+    <div class="row" style="margin-top:26px">${backBtn()}<button class="btn ghost" id="d_det" style="${sbtn}">${t("resBtn")}</button><button class="btn ghost" id="d_hub" style="${sbtn}">${t("toHub")}</button>
       <button class="btn right" id="d_next">${t("nextP")}</button></div></div>`;
   $("#d_det").onclick = () => openResearch(st.pat.key, "finished");
   $("#d_hub").onclick = () => toHub();
+  wireBack();
   $("#d_next").onclick = async () => { await loadSesi(); if (hubScreen() !== "sesi") { st.screen = hubScreen(); render(); return; } openForm(false); };
 }
 
