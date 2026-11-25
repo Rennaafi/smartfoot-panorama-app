@@ -953,7 +953,7 @@ async fn send_whatsapp(app: tauri::AppHandle, key: String) -> Result<WaOpened, S
             return Err(w);
         }
         let f = pdf::find_sheet(&dir).ok_or("NO_SHEET: the patient is not finished yet")?;
-        let copied = scanner::powershell(&format!("Set-Clipboard -LiteralPath {}", scanner::ps_quote(&f.to_string_lossy()))).is_ok();
+        let copied = scanner::powershell(&format!("Set-Clipboard -LiteralPath '{}'", scanner::ps_quote(&f.to_string_lossy()))).is_ok(); // quoted: patient folders have spaces
         let text = url_encode(&pdf::wa_message(&p, pdf::sesi_of(&dir).as_ref(), &s));
         let desktop = has_whatsapp_desktop();
         let url = if desktop { format!("whatsapp://send?phone={}&text={text}", p.wa) } else { format!("https://web.whatsapp.com/send?phone={}&text={text}", p.wa) };
