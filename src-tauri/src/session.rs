@@ -67,7 +67,19 @@ pub struct Settings {
     /// Operator names used before on this laptop, most recent first (for the quick pick list).
     #[serde(default)]
     pub operators: Vec<String>,
+    /// Header line of the patient's result sheet: who runs the screening (empty = left out).
+    #[serde(default)]
+    pub penyelenggara: String,
+    /// Contact line of the result sheet, e.g. a phone number for questions (empty = left out).
+    #[serde(default)]
+    pub kontak: String,
+    /// WhatsApp message sent with the result sheet; empty = DEFAULT_WA_PESAN. Fills in {sapaan}
+    /// (Bapak/Ibu), {nama}, {tanggal} and {tempat}.
+    #[serde(default)]
+    pub wa_pesan: String,
 }
+
+pub const DEFAULT_WA_PESAN: &str = "Halo {sapaan} {nama}, berikut hasil skrining kaki SmartFoot tanggal {tanggal} di {tempat}. Silakan buka file PDF terlampir.";
 
 impl Default for Settings {
     fn default() -> Self {
@@ -77,7 +89,7 @@ impl Default for Settings {
             let home = std::env::var("USERPROFILE").unwrap_or_else(|_| "C:\\".into());
             format!("{home}\\Documents\\Data SmartFoot")
         };
-        Settings { data_dir, scanner: None, station: String::new(), backup_dir: None, setup_done: false, operators: vec![] }
+        Settings { data_dir, scanner: None, station: String::new(), backup_dir: None, setup_done: false, operators: vec![], penyelenggara: String::new(), kontak: String::new(), wa_pesan: String::new() }
     }
 }
 
@@ -115,6 +127,10 @@ pub fn validate_settings(mut new: Settings) -> Result<Settings, String> {
     new.operators = new.operators.iter().filter_map(|o| clean_person(o).ok()).collect();
     new.operators.dedup();
     new.operators.truncate(20);
+    let line = |s: &str, n: usize| s.chars().filter(|c| !c.is_control()).take(n).collect::<String>().trim().to_string();
+    new.penyelenggara = line(&new.penyelenggara, 120);
+    new.kontak = line(&new.kontak, 120);
+    new.wa_pesan = new.wa_pesan.chars().filter(|c| !c.is_control() || *c == '\n').take(600).collect::<String>().trim().to_string();
     Ok(new)
 }
 
@@ -490,9 +506,51 @@ pub struct Patient {
     pub completed: bool,
     #[serde(default)]
     pub cancelled: bool,
+    /// Which foot is scanned first: "left" (default, also for older records) or "right".
+    #[serde(default = "left_first")]
+    pub kaki_pertama: String,
+    /// WhatsApp number as 62..., empty = none given.
+    #[serde(default)]
+    pub wa: String,
+    /// The patient agreed that the result sheet is sent by WhatsApp.
+    #[serde(default)]
+    pub wa_setuju: bool,
+    /// Every time the result sheet was sent, oldest first.
+    #[serde(default)]
+    pub kirim: Vec<SendRecord>,
+    /// Changes made later from Detail pengukuran (INLOW, notes, WhatsApp), oldest first.
+    #[serde(default)]
+    pub edits: Vec<EditRecord>,
+    /// What the result sheet PDF in the folder was made from (pdf::build_key); None = not made yet.
+    #[serde(default)]
+    pub pdf_key: Option<String>,
 }
 
-#[derive(Deserialize, Clone, Debug)]
+fn left_first() -> String {
+    "left".into()
+}
+
+/// One sending of the result sheet by WhatsApp, as reported by the operator ("Sudah terkirim").
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct SendRecord {
+    pub at: String,
+    pub by: String,
+    pub wa: String,
+    /// pdf::content_fingerprint of the sheet that was sent: a later change means "kirim ulang".
+    pub fingerprint: String,
+}
+
+/// A later change from Detail pengukuran: who, when, what ("inlow" / "catatan" / "whatsapp") and the
+/// value before the change.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct EditRecord {
+    pub what: String,
+    pub by: String,
+    pub at: String,
+    pub before: serde_json::Value,
+}
+
+#[derive(Deserialize, Clone, Debug, Default)]
 pub struct PatientForm {
     pub nama: String,
     pub usia: Option<u32>,
@@ -501,6 +559,32 @@ pub struct PatientForm {
     pub td: String,
     pub bb: Option<f32>,
     pub posisi: String,
+    /// "left" or "right" (empty = left).
+    #[serde(default)]
+    pub kaki_pertama: String,
+    /// WhatsApp number as typed (empty = none).
+    #[serde(default)]
+    pub wa: String,
+    #[serde(default)]
+    pub wa_setuju: bool,
+}
+
+/// A WhatsApp number as typed ("0812-3456-7890", "+62 812...", "812...") as 62..., or BAD_WA.
+/// Empty stays empty. Indonesian mobile numbers: 9-12 digits after the 0.
+pub fn clean_wa(raw: &str) -> Result<String, String> {
+    let t = raw.trim();
+    if t.is_empty() {
+        return Ok(String::new());
+    }
+    if !t.chars().all(|c| c.is_ascii_digit() || " -.+()".contains(c)) || t.chars().skip(1).any(|c| c == '+') {
+        return Err("BAD_WA: the WhatsApp number may only hold digits".into());
+    }
+    let d: String = t.chars().filter(char::is_ascii_digit).collect();
+    let rest = if let Some(r) = d.strip_prefix("62") { r } else if let Some(r) = d.strip_prefix('0') { r } else { &d };
+    if !rest.starts_with('8') || !(9..=12).contains(&rest.len()) {
+        return Err("BAD_WA: the WhatsApp number looks too short, too long or is not a mobile number".into());
+    }
+    Ok(format!("62{rest}"))
 }
 
 /// Check the patient form. Everything is checked here, whatever the UI did or did not check.
@@ -531,7 +615,13 @@ pub fn validate_patient(f: &PatientForm) -> Result<PatientForm, String> {
     if f.posisi != "berdiri" && f.posisi != "duduk" {
         return Err("BAD_POSISI: posisi must be berdiri or duduk".into());
     }
-    Ok(PatientForm { nama, usia: Some(usia), kelamin: f.kelamin.clone(), td, bb: f.bb.map(|b| (b * 10.0).round() / 10.0), posisi: f.posisi.clone() })
+    let kaki_pertama = if f.kaki_pertama.is_empty() { "left".to_string() } else { f.kaki_pertama.clone() };
+    if !SIDES.contains(&kaki_pertama.as_str()) {
+        return Err("BAD_SIDE: kaki_pertama must be left or right".into());
+    }
+    let wa = clean_wa(&f.wa)?;
+    let wa_setuju = f.wa_setuju && !wa.is_empty();
+    Ok(PatientForm { nama, usia: Some(usia), kelamin: f.kelamin.clone(), td, bb: f.bb.map(|b| (b * 10.0).round() / 10.0), posisi: f.posisi.clone(), kaki_pertama, wa, wa_setuju })
 }
 
 pub fn read_patient(dir: &Path) -> Result<Patient, String> {
@@ -579,6 +669,12 @@ pub fn create_patient(sesi_dir: &Path, form: &PatientForm, scanner: &str) -> Res
         marks: vec![],
         completed: false,
         cancelled: false,
+        kaki_pertama: f.kaki_pertama,
+        wa: f.wa,
+        wa_setuju: f.wa_setuju,
+        kirim: vec![],
+        edits: vec![],
+        pdf_key: None,
     };
     write_patient(&dir, &p)?;
     // count up only after the patient exists, so a failed create never skips a number
@@ -597,8 +693,65 @@ pub fn update_patient_form(dir: &Path, form: &PatientForm) -> Result<Patient, St
     p.td = f.td;
     p.bb = f.bb;
     p.posisi = f.posisi;
+    p.kaki_pertama = f.kaki_pertama;
+    p.wa = f.wa;
+    p.wa_setuju = f.wa_setuju;
     write_patient(dir, &p)?;
     Ok(p)
+}
+
+fn record_edit(p: &mut Patient, what: &str, by: Option<&str>, before: serde_json::Value) -> Result<(), String> {
+    if let Some(by) = by {
+        p.edits.push(EditRecord { what: what.into(), by: clean_person(by)?, at: now_iso(), before });
+    }
+    Ok(())
+}
+
+/// WhatsApp number and consent, changed later from Detail pengukuran (`by` = who changed it).
+pub fn set_contact(dir: &Path, wa: &str, setuju: bool, by: &str) -> Result<Patient, String> {
+    let wa = clean_wa(wa)?;
+    let mut p = read_patient(dir)?;
+    let setuju = setuju && !wa.is_empty();
+    if p.wa == wa && p.wa_setuju == setuju {
+        return Ok(p);
+    }
+    let before = serde_json::json!({ "wa": p.wa, "wa_setuju": p.wa_setuju });
+    record_edit(&mut p, "whatsapp", Some(by), before)?;
+    p.wa = wa;
+    p.wa_setuju = setuju;
+    write_patient(dir, &p)?;
+    Ok(p)
+}
+
+/// The operator reports that the result sheet with this fingerprint went out by WhatsApp.
+pub fn mark_sent(dir: &Path, by: &str, fingerprint: &str) -> Result<Patient, String> {
+    let mut p = read_patient(dir)?;
+    if p.wa.is_empty() || !p.wa_setuju {
+        return Err("NO_CONSENT: no WhatsApp number or no consent".into());
+    }
+    p.kirim.push(SendRecord { at: now_iso(), by: clean_person(by)?, wa: p.wa.clone(), fingerprint: fingerprint.into() });
+    write_patient(dir, &p)?;
+    Ok(p)
+}
+
+/// Sending state of the result sheet: "tidak" (no number or no consent), "belum" (never sent),
+/// "ulang" (sent, but the sheet or the number changed since) or "terkirim".
+pub fn send_status(p: &Patient, fingerprint: &str) -> &'static str {
+    if p.wa.is_empty() || !p.wa_setuju {
+        "tidak"
+    } else {
+        match p.kirim.last() {
+            None => "belum",
+            Some(r) if r.fingerprint != fingerprint || r.wa != p.wa => "ulang",
+            Some(_) => "terkirim",
+        }
+    }
+}
+
+pub fn set_pdf_key(dir: &Path, key: Option<String>) -> Result<(), String> {
+    let mut p = read_patient(dir)?;
+    p.pdf_key = key;
+    write_patient(dir, &p)
 }
 
 pub fn pending_file(dir: &Path, side: &str) -> PathBuf {
@@ -676,17 +829,30 @@ pub fn reject(dir: &Path, side: &str) -> Result<(), String> {
     move_to_rejected(dir, &from, side)
 }
 
-pub fn set_notes(dir: &Path, notes: &Notes) -> Result<Patient, String> {
+/// Notes; `by` = who changed them later from Detail pengukuran (None = during the patient's turn).
+pub fn set_notes(dir: &Path, notes: &Notes, by: Option<&str>) -> Result<Patient, String> {
     let clean = |s: &str| -> String { s.chars().map(|c| if c.is_control() && c != '\n' { ' ' } else { c }).take(1000).collect::<String>().trim().to_string() };
     let mut p = read_patient(dir)?;
-    p.notes = Notes { kiri: clean(&notes.kiri), kanan: clean(&notes.kanan), umum: clean(&notes.umum) };
+    let new = Notes { kiri: clean(&notes.kiri), kanan: clean(&notes.kanan), umum: clean(&notes.umum) };
+    if new == p.notes {
+        return Ok(p);
+    }
+    let before = serde_json::to_value(&p.notes).unwrap_or_default();
+    record_edit(&mut p, "catatan", by, before)?;
+    p.notes = new;
     write_patient(dir, &p)?;
     Ok(p)
 }
 
-pub fn set_inlow(dir: &Path, inl: Inlow) -> Result<Patient, String> {
+/// INLOW answers; `by` as for set_notes.
+pub fn set_inlow(dir: &Path, inl: Inlow, by: Option<&str>) -> Result<Patient, String> {
     let inl = Inlow { kanan: crate::inlow::clean(inl.kanan)?, kiri: crate::inlow::clean(inl.kiri)? };
     let mut p = read_patient(dir)?;
+    if serde_json::to_value(&inl).ok() == serde_json::to_value(&p.inlow).ok() {
+        return Ok(p);
+    }
+    let before = serde_json::to_value(&p.inlow).unwrap_or_default();
+    record_edit(&mut p, "inlow", by, before)?;
     p.inlow = inl;
     write_patient(dir, &p)?;
     Ok(p)
@@ -737,9 +903,14 @@ pub fn complete(dir: &Path) -> Result<(), String> {
     write_patient(dir, &p)
 }
 
-/// The next foot to scan ("left" then "right"), or None when both are accepted.
+/// The two feet in the patient's scanning order (kaki_pertama first).
+pub fn side_order(p: &Patient) -> [&'static str; 2] {
+    if p.kaki_pertama == "right" { ["right", "left"] } else { ["left", "right"] }
+}
+
+/// The next foot to scan in the patient's order, or None when both are accepted.
 pub fn next_side(p: &Patient) -> Option<&'static str> {
-    SIDES.iter().copied().find(|s| !p.scans.iter().any(|e| e.side == *s))
+    side_order(p).into_iter().find(|s| !p.scans.iter().any(|e| e.side == *s))
 }
 
 /// Every patient folder of a session: (folder, patient), in number order. Unreadable ones are skipped
@@ -864,7 +1035,103 @@ mod tests {
     }
 
     pub fn form(nama: &str) -> PatientForm {
-        PatientForm { nama: nama.into(), usia: Some(41), kelamin: "Perempuan".into(), td: "100/70".into(), bb: Some(54.0), posisi: "berdiri".into() }
+        PatientForm { nama: nama.into(), usia: Some(41), kelamin: "Perempuan".into(), td: "100/70".into(), bb: Some(54.0), posisi: "berdiri".into(), ..Default::default() }
+    }
+
+    #[test]
+    fn whatsapp_numbers_are_stored_as_62() {
+        for (raw, want) in [("0812-3456-7890", "6281234567890"), ("+62 812 3456 789", "628123456789"), ("6281234567890", "6281234567890"), ("81234567890", "6281234567890"), ("  ", "")] {
+            assert_eq!(clean_wa(raw).unwrap(), want, "{raw}");
+        }
+        for bad in ["0812", "021-555-1234", "0812abc4567", "08123456789012345", "0812+3456789"] {
+            assert!(clean_wa(bad).unwrap_err().starts_with("BAD_WA"), "{bad}");
+        }
+        // no number = no consent, whatever was ticked
+        let f = validate_patient(&PatientForm { wa: "".into(), wa_setuju: true, ..form("A") }).unwrap();
+        assert!(!f.wa_setuju && f.kaki_pertama == "left");
+        assert!(validate_patient(&PatientForm { kaki_pertama: "tengah".into(), ..form("A") }).unwrap_err().starts_with("BAD_SIDE"));
+    }
+
+    #[test]
+    fn right_foot_first_changes_the_order_only() {
+        let d = tmp("order");
+        let (sd, _) = start_sesi(&d, "X", "Rina", "7MY").unwrap();
+        let dir = create_patient(&sd, &PatientForm { kaki_pertama: "right".into(), ..form("Siti") }, "dev").unwrap();
+        let p = read_patient(&dir).unwrap();
+        assert_eq!(side_order(&p), ["right", "left"]);
+        assert_eq!(next_side(&p), Some("right"));
+        std::fs::write(pending_file(&dir, "right"), b"png").unwrap();
+        accept(&dir, "right", 12.0, 10, 10, true, vec![]).unwrap();
+        assert_eq!(next_side(&read_patient(&dir).unwrap()), Some("left"));
+        // older records without the field scan left first
+        let old: Patient = serde_json::from_str(&std::fs::read_to_string(dir.join(PATIENT_FILE)).unwrap().replace("\"kaki_pertama\": \"right\",", "")).unwrap();
+        assert_eq!(old.kaki_pertama, "left");
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn rescanning_an_accepted_foot_keeps_the_old_scan_and_resets_its_check() {
+        let d = tmp("rescan");
+        let (sd, _) = start_sesi(&d, "X", "Rina", "7MY").unwrap();
+        let dir = create_patient(&sd, &form("Siti"), "dev").unwrap();
+        std::fs::write(pending_file(&dir, "left"), b"first").unwrap();
+        accept(&dir, "left", 12.0, 10, 10, false, vec![]).unwrap();
+        let check = PointCheck { status: "dilewati".into(), skip_reason: Some("lainnya".into()), operator: "Rina".into(), at: now_iso(), clarke_pts: None, clarke_deg: None, clarke_moved_mm: None, ai_moved_mm: None, guess_source: None };
+        set_check(&dir, "left", check).unwrap();
+        std::fs::write(pending_file(&dir, "left"), b"second").unwrap();
+        accept(&dir, "left", 12.0, 10, 10, false, vec![]).unwrap();
+        let p = read_patient(&dir).unwrap();
+        let e = p.scans.iter().find(|e| e.side == "left").unwrap();
+        assert!(e.check.is_none() && e.attempt == 2);
+        assert_eq!(std::fs::read(dir.join(raw_scan_name("left"))).unwrap(), b"second");
+        assert_eq!(std::fs::read(dir.join(REJECTED).join("Kaki kiri - percobaan 1.png")).unwrap(), b"first");
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn later_edits_are_recorded_with_the_old_values() {
+        let d = tmp("edits");
+        let (sd, _) = start_sesi(&d, "X", "Rina", "7MY").unwrap();
+        let dir = create_patient(&sd, &form("Siti"), "dev").unwrap();
+        // during the patient's turn: no record
+        set_notes(&dir, &Notes { umum: "a".into(), ..Default::default() }, None).unwrap();
+        assert!(read_patient(&dir).unwrap().edits.is_empty());
+        // later, from Detail pengukuran
+        let p = set_notes(&dir, &Notes { umum: "b".into(), ..Default::default() }, Some("Budi")).unwrap();
+        assert_eq!(p.edits.len(), 1);
+        assert_eq!((p.edits[0].what.as_str(), p.edits[0].by.as_str()), ("catatan", "Budi"));
+        assert_eq!(p.edits[0].before["umum"], "a");
+        // saving the same thing again changes nothing
+        assert_eq!(set_notes(&dir, &Notes { umum: "b".into(), ..Default::default() }, Some("Budi")).unwrap().edits.len(), 1);
+        let mut inl = Inlow::default();
+        inl.kiri.items.insert("kuku".into(), 2);
+        let p = set_inlow(&dir, inl, Some("Budi")).unwrap();
+        assert_eq!(p.edits.last().unwrap().what, "inlow");
+        let p = set_contact(&dir, "0812 3456 7890", true, "Budi").unwrap();
+        assert_eq!((p.wa.as_str(), p.wa_setuju), ("6281234567890", true));
+        assert_eq!(p.edits.last().unwrap().before["wa"], "");
+        assert!(set_contact(&dir, "0812", true, "Budi").unwrap_err().starts_with("BAD_WA"));
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    #[test]
+    fn sending_status_follows_consent_and_changes() {
+        let d = tmp("send");
+        let (sd, _) = start_sesi(&d, "X", "Rina", "7MY").unwrap();
+        let dir = create_patient(&sd, &form("Siti"), "dev").unwrap();
+        let p = read_patient(&dir).unwrap();
+        assert_eq!(send_status(&p, "f1"), "tidak");
+        assert!(mark_sent(&dir, "Rina", "f1").unwrap_err().starts_with("NO_CONSENT"));
+        set_contact(&dir, "081234567890", false, "Rina").unwrap();
+        assert_eq!(send_status(&read_patient(&dir).unwrap(), "f1"), "tidak", "a number without consent is not sent");
+        set_contact(&dir, "081234567890", true, "Rina").unwrap();
+        assert_eq!(send_status(&read_patient(&dir).unwrap(), "f1"), "belum");
+        let p = mark_sent(&dir, "Rina", "f1").unwrap();
+        assert_eq!(send_status(&p, "f1"), "terkirim");
+        assert_eq!(send_status(&p, "f2"), "ulang", "the sheet changed after sending");
+        let p = set_contact(&dir, "081299998888", true, "Rina").unwrap();
+        assert_eq!(send_status(&p, "f1"), "ulang", "a new number has not had the sheet");
+        let _ = std::fs::remove_dir_all(&d);
     }
 
     #[test]
@@ -1029,13 +1296,13 @@ mod tests {
         let d = tmp("extras");
         let (sd, _) = start_sesi(&d, "X", "Rina", "7MY").unwrap();
         let dir = create_patient(&sd, &form("A"), "dev").unwrap();
-        let p = set_notes(&dir, &Notes { kiri: "jari ditekuk\u{7}".into(), kanan: "".into(), umum: " pasien gelisah\nbaris 2 ".into() }).unwrap();
+        let p = set_notes(&dir, &Notes { kiri: "jari ditekuk\u{7}".into(), kanan: "".into(), umum: " pasien gelisah\nbaris 2 ".into() }, None).unwrap();
         assert_eq!((p.notes.kiri.as_str(), p.notes.umum.as_str()), ("jari ditekuk", "pasien gelisah\nbaris 2"));
         let mut inl = Inlow::default();
         inl.kiri.items.insert("kuku".into(), 2);
-        assert_eq!(set_inlow(&dir, inl.clone()).unwrap().inlow.kiri.items["kuku"], 2);
+        assert_eq!(set_inlow(&dir, inl.clone(), None).unwrap().inlow.kiri.items["kuku"], 2);
         inl.kiri.items.insert("kuku".into(), 9);
-        assert!(set_inlow(&dir, inl).is_err());
+        assert!(set_inlow(&dir, inl, None).is_err());
         let m = Mark { side: "left".into(), x: 10.0, y: 20.0, r: 5.0, label: "kalus?".into() };
         assert_eq!(set_marks(&dir, vec![m.clone()]).unwrap().marks.len(), 1);
         assert!(set_marks(&dir, vec![Mark { x: f32::NAN, ..m.clone() }]).is_err());
@@ -1060,7 +1327,7 @@ mod tests {
 
     #[test]
     fn settings_from_the_ui_are_checked_and_operators_remembered() {
-        let ok = Settings { data_dir: "E:\\Data SmartFoot".into(), scanner: None, station: " 7my ".into(), backup_dir: Some("  ".into()), setup_done: true, operators: vec![] };
+        let ok = Settings { data_dir: "E:\\Data SmartFoot".into(), scanner: None, station: " 7my ".into(), backup_dir: Some("  ".into()), setup_done: true, operators: vec![], penyelenggara: String::new(), kontak: String::new(), wa_pesan: String::new() };
         let v = validate_settings(ok.clone()).unwrap();
         assert_eq!(v.station, "7MY");
         assert!(v.backup_dir.is_none());

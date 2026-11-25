@@ -62,12 +62,12 @@ fn powershell_with_limit(script: &str, limit: Duration) -> Result<String, String
 }
 
 /// A scan: cold start plus the head returning is about 30 s, so 150 s only ever means "hung".
-fn powershell(script: &str) -> Result<String, String> {
+pub(crate) fn powershell(script: &str) -> Result<String, String> {
     powershell_with_limit(script, Duration::from_secs(150))
 }
 
 /// Single quotes doubled so a value can sit inside a PowerShell '...' string.
-fn ps_quote(s: &str) -> String {
+pub(crate) fn ps_quote(s: &str) -> String {
     s.replace('\'', "''")
 }
 

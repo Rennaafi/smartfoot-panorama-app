@@ -108,7 +108,7 @@ fn formats() -> Fmt {
     }
 }
 
-const EXTRA: [&str; 15] = ["Tanggal", "Tempat", "Operator", "Posisi", "Panjang kaki kanan (mm)", "Panjang kaki kiri (mm)", "Lebar kaki kanan (mm)", "Lebar kaki kiri (mm)", "Catatan", "Tanda manual", "Status", "ID internal", "Folder", "Status Clarke kanan", "Status Clarke kiri"];
+const EXTRA: [&str; 16] = ["Tanggal", "Tempat", "Operator", "Posisi", "Panjang kaki kanan (mm)", "Panjang kaki kiri (mm)", "Lebar kaki kanan (mm)", "Lebar kaki kiri (mm)", "Catatan", "Tanda manual", "Status", "ID internal", "Folder", "Status Clarke kanan", "Status Clarke kiri", "No. WhatsApp"];
 
 /// Column of the first INLOW item (after No, Pasien, Usia, Kelamin, TD, BB).
 const C_ITEMS: u16 = 6;
@@ -224,6 +224,7 @@ fn write_sheet(ws: &mut Worksheet, title: &str, rows: &[(&Sesi, String, &Patient
             };
             ws.write_string_with_format(r, e + 13 + k as u16, st, &f.cell_c)?;
         }
+        ws.write_string_with_format(r, e + 15, &p.wa, &f.cell)?;
     }
     // --- widths, frozen header
     ws.set_column_width(0, 5)?;
@@ -338,7 +339,7 @@ mod tests {
     fn conclusion_reads_like_the_agreed_example() {
         let d = tmp("kes");
         let (sd, _) = start_sesi(&d, "X", "Rina", "7MY").unwrap();
-        let dir = create_patient(&sd, &PatientForm { nama: "Siti".into(), usia: Some(41), kelamin: "Perempuan".into(), td: "".into(), bb: None, posisi: "berdiri".into() }, "dev").unwrap();
+        let dir = create_patient(&sd, &PatientForm { nama: "Siti".into(), usia: Some(41), kelamin: "Perempuan".into(), td: "".into(), bb: None, posisi: "berdiri".into(), ..Default::default() }, "dev").unwrap();
         let mut p = read_patient(&dir).unwrap();
         assert_eq!(kesimpulan(&p), "Kaki kanan: Belum dipindai. INLOW belum lengkap. Kaki kiri: Belum dipindai. INLOW belum lengkap.");
         assert!(saran(&p).is_empty(), "no advice before any INLOW is complete");
@@ -376,7 +377,7 @@ mod tests {
         let d = tmp("wb");
         let (sd, _) = start_sesi(&d, "Puskesmas Beji", "Rina", "7MY").unwrap();
         for n in ["Siti Aminah", "=HYPERLINK(\"x\")"] {
-            create_patient(&sd, &PatientForm { nama: n.into(), usia: Some(41), kelamin: "Perempuan".into(), td: "100/70".into(), bb: Some(54.0), posisi: "berdiri".into() }, "dev").unwrap();
+            create_patient(&sd, &PatientForm { nama: n.into(), usia: Some(41), kelamin: "Perempuan".into(), td: "100/70".into(), bb: Some(54.0), posisi: "berdiri".into(), ..Default::default() }, "dev").unwrap();
         }
         assert!(rebuild(&d, Some(&sd)).is_empty());
         let sesi_file = sd.join(sesi_xlsx_name(&sd));

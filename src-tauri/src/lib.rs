@@ -5,6 +5,7 @@ pub mod export;
 pub mod figures;
 pub mod inlow;
 pub mod measure;
+pub mod pdf;
 pub mod scanner;
 pub mod session;
 
@@ -39,7 +40,11 @@ fn data_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
 fn after_save(app: &tauri::AppHandle, sesi_dir: Option<&Path>, patient_dir: Option<&Path>) -> Vec<String> {
     let Ok(s) = settings(app) else { return vec![] };
     let dd = PathBuf::from(&s.data_dir);
-    let errs = export::rebuild(&dd, sesi_dir);
+    let mut errs = export::rebuild(&dd, sesi_dir);
+    // the patient's result sheet first, so the backup below copies the new one
+    if let Some(w) = patient_dir.and_then(|pd| pdf::ensure_sheet(pd, &s)) {
+        errs.push(w);
+    }
     if let Some(b) = s.backup_dir.as_deref().map(str::trim).filter(|b| !b.is_empty()) {
         let _ = backup::sync_part(&dd, sesi_dir, patient_dir, &PathBuf::from(b));
     }
@@ -224,22 +229,31 @@ struct PatientRow {
     saran: Vec<String>,
     /// Feet whose reference points nobody has confirmed yet ("Belum diperiksa").
     unchecked: Vec<String>,
+    /// Sending of the result sheet: "tidak" / "belum" / "ulang" / "terkirim" (session::send_status).
+    send: &'static str,
+    /// Something is still to do ("Perlu dilengkapi"): points, INLOW or sending.
+    todo: bool,
 }
 
 fn patient_row(dd: &Path, dir: &Path, p: &Patient) -> PatientRow {
+    let send = session::send_status(p, &pdf::fingerprint_of(dir, p));
+    let unchecked = session::unchecked_sides(p);
+    let inlow_complete = p.inlow.kanan.complete() && p.inlow.kiri.complete();
     PatientRow {
+        send,
+        todo: p.completed && !p.cancelled && (!unchecked.is_empty() || !inlow_complete || send == "belum" || send == "ulang"),
         key: session::relative(dd, dir),
         no: p.no,
         nama: p.nama.clone(),
         operator: p.operator.clone(),
         scans: p.scans.len(),
-        inlow_complete: p.inlow.kanan.complete() && p.inlow.kiri.complete(),
+        inlow_complete,
         completed: p.completed,
         cancelled: p.cancelled,
         kesimpulan: export::kesimpulan(p),
         hasil: export::hasil(p),
         saran: export::saran(p),
-        unchecked: session::unchecked_sides(p),
+        unchecked,
     }
 }
 
@@ -381,12 +395,26 @@ struct PatientInfo {
     patient: Patient,
     /// "left", "right" or None when both feet are scanned.
     next_side: Option<&'static str>,
+    /// The two feet in this patient's scanning order.
+    order: [&'static str; 2],
+    /// Sending of the result sheet (session::send_status).
+    send: &'static str,
+    /// The result sheet in the folder, if made (file name only).
+    sheet: Option<String>,
     file_warnings: Vec<String>,
 }
 
 fn patient_info(dd: &Path, dir: &Path, w: Vec<String>) -> Result<PatientInfo, String> {
     let p = session::read_patient(dir)?;
-    Ok(PatientInfo { key: session::relative(dd, dir), next_side: session::next_side(&p), patient: p, file_warnings: w })
+    Ok(PatientInfo {
+        key: session::relative(dd, dir),
+        next_side: session::next_side(&p),
+        order: session::side_order(&p),
+        send: session::send_status(&p, &pdf::fingerprint_of(dir, &p)),
+        sheet: pdf::find_sheet(dir).and_then(|f| f.file_name().map(|n| n.to_string_lossy().to_string())),
+        patient: p,
+        file_warnings: w,
+    })
 }
 
 #[tauri::command]
@@ -409,18 +437,31 @@ async fn start_patient(app: tauri::AppHandle, form: session::PatientForm) -> Res
     .map_err(|e| e.to_string())?
 }
 
+/// Run a patient command off the window's thread (saving may make the result sheet, ~1 s).
+async fn blocking<T: Send + 'static>(f: impl FnOnce() -> Result<T, String> + Send + 'static) -> Result<T, String> {
+    tauri::async_runtime::spawn_blocking(f).await.map_err(|e| e.to_string())?
+}
+
+/// Opening a patient also makes a missing or out-of-date result sheet (patients from before 0.3.0).
 #[tauri::command]
-fn get_patient(app: tauri::AppHandle, key: String) -> Result<PatientInfo, String> {
-    let (dd, dir) = patient_dir(&app, &key)?;
-    patient_info(&dd, &dir, vec![])
+async fn get_patient(app: tauri::AppHandle, key: String) -> Result<PatientInfo, String> {
+    blocking(move || {
+        let (dd, dir) = patient_dir(&app, &key)?;
+        let w = pdf::ensure_sheet(&dir, &settings(&app)?).into_iter().collect();
+        patient_info(&dd, &dir, w)
+    })
+    .await
 }
 
 #[tauri::command]
-fn update_patient(app: tauri::AppHandle, key: String, form: session::PatientForm) -> Result<PatientInfo, String> {
-    let (dd, dir) = patient_dir(&app, &key)?;
-    session::update_patient_form(&dir, &form)?;
-    let w = after_save(&app, sesi_of(&dir), Some(&dir));
-    patient_info(&dd, &dir, w)
+async fn update_patient(app: tauri::AppHandle, key: String, form: session::PatientForm) -> Result<PatientInfo, String> {
+    blocking(move || {
+        let (dd, dir) = patient_dir(&app, &key)?;
+        session::update_patient_form(&dir, &form)?;
+        let w = after_save(&app, sesi_of(&dir), Some(&dir));
+        patient_info(&dd, &dir, w)
+    })
+    .await
 }
 
 #[derive(Serialize)]
@@ -805,28 +846,134 @@ fn unchecked_feet(app: tauri::AppHandle) -> Result<Vec<UncheckedFoot>, String> {
     Ok(out)
 }
 
+/// `by` = who completes it later from Detail pengukuran (recorded with the old answers); None
+/// during the patient's turn.
 #[tauri::command]
-fn save_inlow(app: tauri::AppHandle, key: String, inlow: inlow::Inlow) -> Result<PatientInfo, String> {
-    let (dd, dir) = patient_dir(&app, &key)?;
-    session::set_inlow(&dir, inlow)?;
-    let w = after_save(&app, sesi_of(&dir), Some(&dir));
-    patient_info(&dd, &dir, w)
+async fn save_inlow(app: tauri::AppHandle, key: String, inlow: inlow::Inlow, by: Option<String>) -> Result<PatientInfo, String> {
+    blocking(move || {
+        let (dd, dir) = patient_dir(&app, &key)?;
+        session::set_inlow(&dir, inlow, by.as_deref())?;
+        let w = after_save(&app, sesi_of(&dir), Some(&dir));
+        patient_info(&dd, &dir, w)
+    })
+    .await
 }
 
 #[tauri::command]
-fn save_notes(app: tauri::AppHandle, key: String, notes: session::Notes) -> Result<PatientInfo, String> {
-    let (dd, dir) = patient_dir(&app, &key)?;
-    session::set_notes(&dir, &notes)?;
-    let w = after_save(&app, sesi_of(&dir), Some(&dir));
-    patient_info(&dd, &dir, w)
+async fn save_notes(app: tauri::AppHandle, key: String, notes: session::Notes, by: Option<String>) -> Result<PatientInfo, String> {
+    blocking(move || {
+        let (dd, dir) = patient_dir(&app, &key)?;
+        session::set_notes(&dir, &notes, by.as_deref())?;
+        let w = after_save(&app, sesi_of(&dir), Some(&dir));
+        patient_info(&dd, &dir, w)
+    })
+    .await
 }
 
 #[tauri::command]
-fn save_marks(app: tauri::AppHandle, key: String, marks: Vec<session::Mark>) -> Result<PatientInfo, String> {
-    let (dd, dir) = patient_dir(&app, &key)?;
-    session::set_marks(&dir, marks)?;
-    let w = after_save(&app, sesi_of(&dir), Some(&dir));
-    patient_info(&dd, &dir, w)
+async fn save_marks(app: tauri::AppHandle, key: String, marks: Vec<session::Mark>) -> Result<PatientInfo, String> {
+    blocking(move || {
+        let (dd, dir) = patient_dir(&app, &key)?;
+        session::set_marks(&dir, marks)?;
+        let w = after_save(&app, sesi_of(&dir), Some(&dir));
+        patient_info(&dd, &dir, w)
+    })
+    .await
+}
+
+/// WhatsApp number and consent, changed later from Detail pengukuran.
+#[tauri::command]
+async fn save_contact(app: tauri::AppHandle, key: String, wa: String, setuju: bool, by: String) -> Result<PatientInfo, String> {
+    blocking(move || {
+        let (dd, dir) = patient_dir(&app, &key)?;
+        session::set_contact(&dir, &wa, setuju, &by)?;
+        let w = after_save(&app, sesi_of(&dir), Some(&dir));
+        patient_info(&dd, &dir, w)
+    })
+    .await
+}
+
+/// "Buka ringkasan": make the result sheet if needed and open it in the PDF viewer.
+#[tauri::command]
+async fn open_sheet(app: tauri::AppHandle, key: String) -> Result<String, String> {
+    blocking(move || {
+        let (_, dir) = patient_dir(&app, &key)?;
+        if let Some(w) = pdf::ensure_sheet(&dir, &settings(&app)?) {
+            return Err(w);
+        }
+        let f = pdf::find_sheet(&dir).ok_or("NO_SHEET: the patient is not finished yet")?;
+        tauri_plugin_opener::open_path(&f, None::<&str>).map_err(|e| e.to_string())?;
+        Ok(f.display().to_string())
+    })
+    .await
+}
+
+/// Is WhatsApp Desktop installed (it registers the whatsapp: link type)?
+fn has_whatsapp_desktop() -> bool {
+    use std::os::windows::process::CommandExt;
+    std::process::Command::new("reg")
+        .args(["query", r"HKEY_CLASSES_ROOT\whatsapp"])
+        .creation_flags(0x0800_0000)
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false)
+}
+
+fn url_encode(s: &str) -> String {
+    s.bytes()
+        .map(|b| match b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => (b as char).to_string(),
+            _ => format!("%{b:02X}"),
+        })
+        .collect()
+}
+
+#[derive(Serialize)]
+struct WaOpened {
+    /// "desktop" (WhatsApp app) or "web" (web.whatsapp.com in the browser)
+    via: &'static str,
+    /// The sheet was put on the clipboard: Ctrl+V in the chat attaches it.
+    copied: bool,
+    sheet: String,
+}
+
+/// "Kirim lewat WhatsApp": make the sheet if needed, put the file on the clipboard and open the
+/// patient's chat with the message typed in. The operator pastes (Ctrl+V), sends, then reports it
+/// with mark_sent. Nothing goes out without the operator.
+#[tauri::command]
+async fn send_whatsapp(app: tauri::AppHandle, key: String) -> Result<WaOpened, String> {
+    blocking(move || {
+        let s = settings(&app)?;
+        let (_, dir) = patient_dir(&app, &key)?;
+        let p = session::read_patient(&dir)?;
+        if p.wa.is_empty() || !p.wa_setuju {
+            return Err("NO_CONSENT: no WhatsApp number or no consent".into());
+        }
+        if let Some(w) = pdf::ensure_sheet(&dir, &s) {
+            return Err(w);
+        }
+        let f = pdf::find_sheet(&dir).ok_or("NO_SHEET: the patient is not finished yet")?;
+        let copied = scanner::powershell(&format!("Set-Clipboard -LiteralPath {}", scanner::ps_quote(&f.to_string_lossy()))).is_ok();
+        let text = url_encode(&pdf::wa_message(&p, pdf::sesi_of(&dir).as_ref(), &s));
+        let desktop = has_whatsapp_desktop();
+        let url = if desktop { format!("whatsapp://send?phone={}&text={text}", p.wa) } else { format!("https://web.whatsapp.com/send?phone={}&text={text}", p.wa) };
+        tauri_plugin_opener::open_url(url, None::<&str>).map_err(|e| format!("WA_OPEN: {e}"))?;
+        Ok(WaOpened { via: if desktop { "desktop" } else { "web" }, copied, sheet: f.file_name().unwrap_or_default().to_string_lossy().to_string() })
+    })
+    .await
+}
+
+/// "Sudah terkirim": the operator reports the sheet went out (`by` = operator).
+#[tauri::command]
+async fn mark_sent(app: tauri::AppHandle, key: String, by: String) -> Result<PatientInfo, String> {
+    blocking(move || {
+        let (dd, dir) = patient_dir(&app, &key)?;
+        let p = session::read_patient(&dir)?;
+        session::mark_sent(&dir, &by, &pdf::fingerprint_of(&dir, &p))?;
+        let w = after_save(&app, sesi_of(&dir), Some(&dir));
+        patient_info(&dd, &dir, w)
+    })
+    .await
 }
 
 #[tauri::command]
@@ -839,11 +986,14 @@ fn cancel_patient(app: tauri::AppHandle, key: String) -> Result<bool, String> {
 }
 
 #[tauri::command]
-fn finish_patient(app: tauri::AppHandle, key: String) -> Result<PatientInfo, String> {
-    let (dd, dir) = patient_dir(&app, &key)?;
-    session::complete(&dir)?;
-    let w = after_save(&app, sesi_of(&dir), Some(&dir));
-    patient_info(&dd, &dir, w)
+async fn finish_patient(app: tauri::AppHandle, key: String) -> Result<PatientInfo, String> {
+    blocking(move || {
+        let (dd, dir) = patient_dir(&app, &key)?;
+        session::complete(&dir)?;
+        let w = after_save(&app, sesi_of(&dir), Some(&dir));
+        patient_info(&dd, &dir, w)
+    })
+    .await
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -885,6 +1035,10 @@ pub fn run() {
             save_inlow,
             save_notes,
             save_marks,
+            save_contact,
+            open_sheet,
+            send_whatsapp,
+            mark_sent,
             cancel_patient,
             finish_patient
         ])

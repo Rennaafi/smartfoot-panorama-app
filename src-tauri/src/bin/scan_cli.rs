@@ -123,7 +123,7 @@ fn seed(dd: &Path, list: &Path) -> Result<usize, String> {
         if f.len() != 8 {
             return Err(format!("line {}: expected 8 fields", i + 2));
         }
-        let form = session::PatientForm { nama: f[0].into(), usia: f[1].parse().ok(), kelamin: f[2].into(), td: String::new(), bb: None, posisi: f[3].into() };
+        let form = session::PatientForm { nama: f[0].into(), usia: f[1].parse().ok(), kelamin: f[2].into(), td: String::new(), bb: None, posisi: f[3].into(), ..Default::default() };
         let dir = session::create_patient(&sd, &form, "seed (scan_cli)")?;
         for (side, src) in [("left", f[4]), ("right", f[5])] {
             if src == "-" {
@@ -151,7 +151,7 @@ fn seed(dd: &Path, list: &Path) -> Result<usize, String> {
             inl.kanan.items.insert(it.key.into(), it.options[(k + i) % it.options.len()].0);
             inl.kiri.items.insert(it.key.into(), it.options[0].0);
         }
-        session::set_inlow(&dir, inl)?;
+        session::set_inlow(&dir, inl, None)?;
         if f[7] == "done" {
             session::complete(&dir)?;
         }
