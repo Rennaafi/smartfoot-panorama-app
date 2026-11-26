@@ -64,6 +64,9 @@ fn sheet_from_the_sample_session() {
     std::fs::copy(pdf::find_sheet(&dir).unwrap(), &keep).unwrap();
     println!("sheet: {} ({} bytes), copy at {}", name, bytes.len(), keep.display());
     let msg = pdf::wa_message(&p2, pdf::sesi_of(&dir).as_ref(), &s);
-    assert!(msg.starts_with(&format!("Halo {} {}", if p2.kelamin == "Perempuan" { "Ibu" } else { "Bapak" }, p2.nama)), "{msg}");
+    let first = p2.nama.split_whitespace().next().unwrap();
+    assert!(msg.starts_with(&format!("Halo {} {first} 🙏", if p2.kelamin == "Perempuan" { "Ibu" } else { "Bapak" })), "{msg}");
+    assert!(msg.contains(&format!("{} – Tim SmartFoot", p2.operator)), "{msg}");
+    assert!(!msg.contains('{'), "a placeholder was left: {msg}");
     let _ = std::fs::remove_dir_all(&tmp);
 }

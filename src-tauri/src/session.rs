@@ -74,12 +74,13 @@ pub struct Settings {
     #[serde(default)]
     pub kontak: String,
     /// WhatsApp message sent with the result sheet; empty = DEFAULT_WA_PESAN. Fills in {sapaan}
-    /// (Bapak/Ibu), {nama}, {tanggal} and {tempat}.
+    /// (Bapak/Ibu), {panggilan} (first word of the name), {nama}, {tanggal}, {tempat}, {petugas} and
+    /// {baca} (a "please read it all" line from risk class C up).
     #[serde(default)]
     pub wa_pesan: String,
 }
 
-pub const DEFAULT_WA_PESAN: &str = "Halo {sapaan} {nama}, berikut hasil skrining kaki SmartFoot tanggal {tanggal} di {tempat}. Silakan buka file PDF terlampir.";
+pub const DEFAULT_WA_PESAN: &str = "Halo {sapaan} {panggilan} 🙏\nTerima kasih sudah ikut skrining kaki SmartFoot tanggal {tanggal} di {tempat}. Hasilnya ada di PDF terlampir.{baca}\nKalau ada yang kurang jelas, balas saja pesan ini.\n\nSalam sehat,\n{petugas} – Tim SmartFoot";
 
 impl Default for Settings {
     fn default() -> Self {

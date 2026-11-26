@@ -131,9 +131,10 @@ const T = {
     viaDesktop: "aplikasi WhatsApp", viaWeb: "browser (WhatsApp Web; masuk dulu bila diminta)",
     shIncomplete: "Masih ada yang belum lengkap ({list}). Tekan lagi untuk tetap mengirim",
     shSentAt: "Terkirim {when} oleh {by}", shFile: "File",
+    shUrgent: "Risiko urgen: sampaikan hasilnya langsung ke pasien dan rujuk ke tenaga kesehatan. Lembar ini hanya pelengkap.",
     shSetH: "Lembar hasil pasien", shPeny: "Penyelenggara", shKontak: "Kontak", shPesan: "Pesan WhatsApp",
     shSetNote: "Penyelenggara dan kontak tampil di kepala lembar hasil. Kosongkan bila tidak perlu.",
-    shPesanNote: "Kata dalam kurung kurawal diisi otomatis: {sapaan} (Bapak/Ibu), {nama}, {tanggal}, {tempat}. Kosongkan untuk memakai pesan bawaan.",
+    shPesanNote: "Kata dalam kurung kurawal diisi otomatis: {sapaan} (Bapak/Ibu), {panggilan} (kata pertama nama), {nama}, {tanggal}, {tempat}, {petugas}, {baca} (kalimat \"mohon dibaca sampai habis\" untuk risiko sedang ke atas). Kosongkan untuk memakai pesan bawaan.",
     e_NO_CONSENT: "Tidak ada nomor WhatsApp, atau pasien belum setuju hasil dikirim.", e_NO_SHEET: "Lembar hasil dibuat setelah pasien selesai.",
     e_SHEET: "Lembar hasil tidak bisa dibuat", e_FONT: "Huruf Segoe UI tidak ditemukan di Windows, jadi lembar hasil tidak bisa dibuat.", e_WA_OPEN: "WhatsApp tidak bisa dibuka",
     // settings, scanner, backup, data folder, first run
@@ -283,9 +284,10 @@ const T = {
     viaDesktop: "the WhatsApp app", viaWeb: "the browser (WhatsApp Web; log in first if asked)",
     shIncomplete: "Some parts are not complete ({list}). Press again to send anyway",
     shSentAt: "Sent {when} by {by}", shFile: "File",
+    shUrgent: "Urgent risk: tell the patient in person and refer them to a health worker. This sheet only adds to that.",
     shSetH: "Patient result sheet", shPeny: "Organiser", shKontak: "Contact", shPesan: "WhatsApp message",
     shSetNote: "Organiser and contact appear in the sheet's header. Leave empty if not needed.",
-    shPesanNote: "Words in curly brackets are filled in: {sapaan} (Bapak/Ibu), {nama}, {tanggal}, {tempat}. Leave empty for the default message.",
+    shPesanNote: "Words in curly brackets are filled in: {sapaan} (Bapak/Ibu), {panggilan} (first word of the name), {nama}, {tanggal}, {tempat}, {petugas}, {baca} (a \"please read it all\" line from medium risk up). Leave empty for the default message.",
     e_NO_CONSENT: "No WhatsApp number, or the patient has not agreed to receive the result.", e_NO_SHEET: "The result sheet is made once the patient is finished.",
     e_SHEET: "The result sheet could not be made", e_FONT: "The Segoe UI font was not found in Windows, so the result sheet cannot be made.", e_WA_OPEN: "WhatsApp could not be opened",
     set: "Settings", setSub: "Settings: data folder, scanner, backup copy and scale calibration.",
@@ -449,7 +451,7 @@ const warnBox = () => { const w = st.warn; st.warn = []; return w.length ? `<div
 const takeWarn = (r) => { if (r?.file_warnings?.length) st.warn = r.file_warnings; return r; };
 
 // the same text as session::DEFAULT_WA_PESAN (shown as the example in Settings)
-const DEFAULT_WA_PESAN = "Halo {sapaan} {nama}, berikut hasil skrining kaki SmartFoot tanggal {tanggal} di {tempat}. Silakan buka file PDF terlampir.";
+const DEFAULT_WA_PESAN = "Halo {sapaan} {panggilan} 🙏\nTerima kasih sudah ikut skrining kaki SmartFoot tanggal {tanggal} di {tempat}. Hasilnya ada di PDF terlampir.{baca}\nKalau ada yang kurang jelas, balas saja pesan ini.\n\nSalam sehat,\n{petugas} – Tim SmartFoot";
 
 // ---- small helpers ----
 const sideName = (s) => t(s === "left" ? "left" : "right");
@@ -577,6 +579,8 @@ const wireBack = () => { if ($("#bk")) $("#bk").onclick = goBack; };
 // st.wa = the WhatsApp chat just opened for a patient (paste instructions + "Sudah terkirim").
 function sheetBlock(info) {
   const P = info.patient, can = !!(P.wa && P.wa_setuju), sent = P.kirim?.at(-1);
+  // class E (urgent) on either foot: a reminder to tell the patient in person (sending stays allowed)
+  const urgent = !!st.spec && ["kanan", "kiri"].some((f) => { const tot = P.inlow?.[f] ? footTotal(P.inlow[f]) : null; return tot != null && riskOf(tot)[1] === "E"; });
   const stc = { terkirim: "ok", belum: "warn", ulang: "warn", tidak: "" }[info.send] ?? "";
   const w = st.wa?.key === info.key ? st.wa : null;
   const howTo = w ? t(w.copied ? "shOpened" : "shOpenedNoCopy").replace("{via}", t(w.via === "desktop" ? "viaDesktop" : "viaWeb")).replace("{file}", esc(w.sheet)) : "";
@@ -586,6 +590,7 @@ function sheetBlock(info) {
     <div class="row" style="margin-top:12px"><button class="btn ghost" id="sh_open" style="${sbtnS}">${t("shOpen")}</button>
       <button class="btn ${can ? "" : "ghost"}" id="sh_send" style="${sbtnS}" ${can ? "" : "disabled"}>${t("shSend")}</button></div>
     ${can ? "" : `<p class="muted" style="margin:8px 0 0">${t("shNoWa")}</p>`}
+    ${urgent ? `<div class="err" style="margin:10px 0 0">${t("shUrgent")}</div>` : ""}
     ${w ? `<div class="okbox" style="margin:12px 0 0;font-weight:500">${howTo}</div><div class="row" style="margin-top:10px"><button class="btn ok" id="sh_sent" style="${sbtn}">${t("shSent")}</button></div>` : ""}
     <div id="sherr"></div></div>`;
 }
@@ -1545,7 +1550,7 @@ function settingsScreen(m) {
       <div class="card" style="margin-top:18px"><h2 style="font-size:20px;margin-bottom:6px">${t("shSetH")}</h2><p class="muted" style="margin:0 0 12px">${t("shSetNote")}</p>
         <label>${t("shPeny")}</label><input id="s_peny" value="${esc(c.penyelenggara ?? "")}" maxlength="120">
         <label style="margin-top:12px">${t("shKontak")}</label><input id="s_kontak" value="${esc(c.kontak ?? "")}" maxlength="120" placeholder="0812-…">
-        <label style="margin-top:12px">${t("shPesan")}</label><textarea id="s_pesan" rows="4" maxlength="600" placeholder="${esc(DEFAULT_WA_PESAN)}">${esc(c.wa_pesan ?? "")}</textarea>
+        <label style="margin-top:12px">${t("shPesan")}</label><textarea id="s_pesan" rows="7" maxlength="600" placeholder="${esc(DEFAULT_WA_PESAN)}">${esc(c.wa_pesan ?? "")}</textarea>
         <p class="muted" style="margin:6px 0 10px">${esc(t("shPesanNote"))}</p>
         <div class="row"><button class="btn ${st.flash === "sheet" ? "ok" : "ghost"}" id="s_shsave" style="padding:12px 18px;font-size:16px">${st.flash === "sheet" ? t("savedBtn") : t("save")}</button></div>${fieldErr("sheet")}</div></div></div>
     <div class="row" style="margin-top:22px"><button class="btn ghost" id="back">${t("back")}</button><button class="btn right" id="gores">${t("resBtn")}</button></div>`;
